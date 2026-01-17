@@ -1,0 +1,43 @@
+# Template Scenario - Tests confluence-template skill
+# Template and blueprint operations
+---
+prompt: |
+  List available templates in CDEMO space
+expect:
+  tools:
+    must_call: [Skill]
+  text:
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should list available page templates
+    in the space, or indicate if none are defined.
+---
+prompt: |
+  What templates are available for creating new pages?
+expect:
+  text:
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should describe available templates
+    including system and custom templates.
+---
+prompt: |
+  Show me the Meeting Notes Template page
+expect:
+  text:
+    must_contain: [Meeting Notes, Agenda]
+    must_not_contain: [error, "not found"]
+  semantic: |
+    Response should show the Meeting Notes Template page
+    content including sections for agenda and action items.
+---
+prompt: |
+  Create a new page using the Meeting Notes template
+expect:
+  text:
+    must_contain: [Meeting Notes]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should explain how to create a page
+    from the Meeting Notes Template.
+---

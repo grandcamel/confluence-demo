@@ -1,0 +1,53 @@
+# Comment Scenario - Tests confluence-comment skill
+# Page and inline comment operations
+---
+prompt: |
+  Show me comments on the API Reference page
+expect:
+  tools:
+    must_call: [Skill]
+  text:
+    must_not_contain: [error, "not found"]
+  semantic: |
+    Response should show any comments on the API Reference page,
+    or indicate if there are no comments.
+---
+prompt: |
+  Add a comment to the API Reference page: This documentation is very helpful for new developers!
+expect:
+  text:
+    must_contain: [comment, added]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should confirm a comment was added
+    to the API Reference page.
+---
+prompt: |
+  Show me the comment I just added
+expect:
+  text:
+    must_contain: [helpful, developers]
+    must_not_contain: [error, "not found"]
+  semantic: |
+    Response should show the recently added comment
+    about helpful documentation.
+---
+prompt: |
+  Add a comment to the Q1 Planning page: Let's schedule a review meeting for next week
+expect:
+  text:
+    must_contain: [comment, Q1 Planning]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should confirm adding a comment
+    to the Q1 Planning page.
+---
+prompt: |
+  Delete the comment I added to the API Reference page
+expect:
+  text:
+    must_contain: [delete, comment]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should confirm the comment was deleted.
+---

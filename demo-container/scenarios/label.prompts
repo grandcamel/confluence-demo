@@ -1,0 +1,54 @@
+# Label Scenario - Tests confluence-label skill
+# Content labeling operations
+---
+prompt: |
+  Show me all labels on the API Reference page
+expect:
+  tools:
+    must_call: [Skill]
+  text:
+    must_contain: [api, technical, demo]
+    must_not_contain: [error, "not found", failed]
+  semantic: |
+    Response should list labels on the API Reference page,
+    including demo, api, and technical labels.
+---
+prompt: |
+  Add the label 'important' to the Getting Started Guide
+expect:
+  text:
+    must_contain: [important, label, added]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should confirm the 'important' label was added
+    to the Getting Started Guide page.
+---
+prompt: |
+  Show me all pages with the label 'technical' in CDEMO
+expect:
+  text:
+    must_contain: [API Reference, Architecture]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should list pages that have the 'technical' label,
+    including API Reference and Architecture Diagram.
+---
+prompt: |
+  Remove the label 'important' from the Getting Started Guide
+expect:
+  text:
+    must_contain: [removed, important]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should confirm the label was removed
+    from the page.
+---
+prompt: |
+  What labels exist in the CDEMO space?
+expect:
+  text:
+    must_contain: [demo, api, technical]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should list all labels used in the CDEMO space.
+---

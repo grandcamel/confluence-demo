@@ -1,0 +1,42 @@
+# Permission Scenario - Tests confluence-permission skill
+# Access control operations
+---
+prompt: |
+  Show me the permissions for the CDEMO space
+expect:
+  tools:
+    must_call: [Skill]
+  text:
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should show space-level permissions,
+    including who can view and edit content.
+---
+prompt: |
+  Who can view the API Reference page?
+expect:
+  text:
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should indicate view permissions for the page,
+    which may inherit from space permissions.
+---
+prompt: |
+  What are the different permission levels in Confluence?
+expect:
+  text:
+    must_contain: [view, edit]
+    must_not_contain: [error]
+  semantic: |
+    Response should describe permission levels
+    including view, edit, and administrative permissions.
+---
+prompt: |
+  Can anonymous users view pages in CDEMO?
+expect:
+  text:
+    must_not_contain: [error]
+  semantic: |
+    Response should indicate whether anonymous access
+    is enabled for the space.
+---

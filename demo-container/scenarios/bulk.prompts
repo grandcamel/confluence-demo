@@ -1,0 +1,45 @@
+# Bulk Scenario - Tests confluence-bulk skill
+# Bulk operations with dry-run support
+---
+prompt: |
+  Add the label 'reviewed' to all pages under Product Documentation - dry run first
+expect:
+  tools:
+    must_call: [Skill]
+  text:
+    must_contain: [dry-run, pages, reviewed]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should show a dry-run preview of pages that would be
+    labeled, without actually making changes.
+---
+prompt: |
+  How many pages would be affected by adding 'reviewed' to all pages in CDEMO?
+expect:
+  text:
+    must_contain: [page]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should count pages that would be affected
+    by the bulk operation.
+---
+prompt: |
+  List all bulk operations available for Confluence
+expect:
+  text:
+    must_contain: [label, move]
+    must_not_contain: [error]
+  semantic: |
+    Response should describe available bulk operations
+    including bulk labeling and bulk moving.
+---
+prompt: |
+  Show me what pages would be deleted if I removed all non-demo pages - dry run only
+expect:
+  text:
+    must_contain: [dry-run]
+    must_not_contain: [error, executing]
+  semantic: |
+    Response should show a preview of what would be deleted,
+    emphasizing this is a dry-run only.
+---

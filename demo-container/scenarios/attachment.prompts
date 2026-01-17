@@ -1,0 +1,43 @@
+# Attachment Scenario - Tests confluence-attachment skill
+# File attachment operations
+---
+prompt: |
+  Show me attachments on the Architecture Diagram page
+expect:
+  tools:
+    must_call: [Skill]
+  text:
+    must_not_contain: [error, "not found"]
+  semantic: |
+    Response should list any attachments on the Architecture Diagram page,
+    or indicate there are no attachments.
+---
+prompt: |
+  List all attachments in the CDEMO space
+expect:
+  text:
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should list attachments across the space,
+    or indicate if there are none.
+---
+prompt: |
+  What types of files can I attach to a Confluence page?
+expect:
+  text:
+    must_contain: [file]
+    must_not_contain: [error]
+  semantic: |
+    Response should describe supported attachment types
+    including images, documents, and other files.
+---
+prompt: |
+  How do I upload an attachment to a page?
+expect:
+  text:
+    must_contain: [upload, attachment]
+    must_not_contain: [error]
+  semantic: |
+    Response should explain how to upload attachments,
+    mentioning file paths or upload methods.
+---

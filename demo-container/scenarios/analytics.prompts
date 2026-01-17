@@ -1,0 +1,42 @@
+# Analytics Scenario - Tests confluence-analytics skill
+# Content analytics and popularity operations
+---
+prompt: |
+  Show me the view count for the API Reference page
+expect:
+  tools:
+    must_call: [Skill]
+  text:
+    must_contain: [view]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should show view statistics for the page,
+    including total views or recent view count.
+---
+prompt: |
+  Who is watching the Product Documentation page?
+expect:
+  text:
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should show users who are watching the page
+    for updates, or indicate no watchers.
+---
+prompt: |
+  What are the most popular pages in CDEMO?
+expect:
+  text:
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should list pages by popularity,
+    based on view counts or other metrics.
+---
+prompt: |
+  Show me recent activity in the CDEMO space
+expect:
+  text:
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should show recent changes, updates,
+    or activity in the space.
+---
