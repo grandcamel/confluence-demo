@@ -1,0 +1,80 @@
+# Hierarchy Scenario - Tests confluence-hierarchy skill
+# Page tree and ancestry operations
+#
+# Tool expectation pattern for conversation mode:
+# - First prompt: must_call [Skill] (loads context)
+# - Subsequent prompts: may use Bash for CLI operations
+---
+prompt: |
+  Show me the page tree for Product Documentation in CDEMO
+expect:
+  tools:
+    must_call: [Skill]
+  text:
+    must_contain: [Product Documentation, API Reference, Getting Started]
+    must_not_contain: [error, "not found", failed]
+  semantic: |
+    Response should show the page hierarchy under Product Documentation,
+    including child pages like API Reference and Getting Started Guide.
+---
+prompt: |
+  What are the child pages of Team Resources?
+expect:
+  tools:
+    must_call: [Bash]
+  text:
+    must_contain: [Meeting Notes, Q1 Planning, Architecture]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should list child pages under Team Resources,
+    including Meeting Notes Template, Q1 Planning, and Architecture Diagram.
+---
+prompt: |
+  Show me the ancestors of the API Reference page
+expect:
+  text:
+    must_contain: [Product Documentation]
+    must_not_contain: [error, "not found"]
+  semantic: |
+    Response should show the parent page(s) of API Reference,
+    which is Product Documentation.
+---
+prompt: |
+  Get the full page tree for CDEMO space
+expect:
+  text:
+    must_contain: [Product Documentation, Team Resources]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should show the complete page hierarchy
+    for the CDEMO space, starting from root pages.
+---
+prompt: |
+  How deep is the page hierarchy under Product Documentation?
+expect:
+  text:
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should indicate the depth of the hierarchy,
+    showing that there are child pages one level deep.
+---
+prompt: |
+  Show me the siblings of API Reference page
+expect:
+  text:
+    must_contain: [Getting Started, Release Notes]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should show sibling pages at the same level,
+    including Getting Started Guide and Release Notes v2.0.
+---
+prompt: |
+  Move the Q1 Planning page under Product Documentation
+expect:
+  text:
+    must_contain: [move, Q1 Planning, Product Documentation]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should confirm moving Q1 Planning
+    to be a child of Product Documentation.
+---

@@ -1,0 +1,109 @@
+# Page Scenario - Tests confluence-page skill
+# CRUD operations for Confluence pages and blog posts
+#
+# Tool expectation pattern for conversation mode:
+# - First prompt: must_call [Skill] (loads context, then Bash executes CLI)
+# - Subsequent prompts: no tool requirement (may use context or call CLI)
+# - Text validation determines success, not tool usage
+---
+prompt: |
+  Show me all pages in the CDEMO space
+expect:
+  tools:
+    must_call: [Skill]
+  text:
+    must_contain: [Product Documentation, Team Resources]
+    must_not_contain: [error, failed, "I don't have access"]
+  semantic: |
+    Response should list pages from CDEMO space with page titles.
+    Should show the demo pages including Product Documentation and Team Resources.
+---
+prompt: |
+  What's in the API Reference page?
+expect:
+  text:
+    must_contain: [API Reference, endpoint]
+    must_not_contain: [error, "not found", failed]
+  semantic: |
+    Response should show the content of the API Reference page,
+    including information about REST API endpoints.
+---
+prompt: |
+  Create a new page under Product Documentation called "User Guide" with content: This guide helps new users get started with our product.
+expect:
+  text:
+    must_contain: [User Guide, created]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should confirm creation of a new page called User Guide
+    under the Product Documentation parent page.
+---
+prompt: |
+  Show me the details of the User Guide page we just created
+expect:
+  text:
+    must_contain: [User Guide]
+    must_not_contain: [error, "not found"]
+  semantic: |
+    Response should show details of the User Guide page
+    including its content about helping new users.
+---
+prompt: |
+  Update the User Guide page to add: ## Getting Help\n\nContact support at support@example.com
+expect:
+  text:
+    must_contain: [update, User Guide]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should confirm the User Guide page was updated
+    with the new Getting Help section.
+---
+prompt: |
+  Get the page with ID from the Getting Started Guide
+expect:
+  text:
+    must_contain: [Getting Started, Prerequisites]
+    must_not_contain: [error, "not found"]
+  semantic: |
+    Response should show the Getting Started Guide page content
+    including prerequisites and installation steps.
+---
+prompt: |
+  Show me the Release Notes v2.0 page
+expect:
+  text:
+    must_contain: [Release Notes, New Features, Dark mode]
+    must_not_contain: [error, "not found"]
+  semantic: |
+    Response should show the Release Notes v2.0 page
+    including new features like dark mode support.
+---
+prompt: |
+  Create a blog post in CDEMO: Weekly Update - We've released new features this week
+expect:
+  text:
+    must_contain: [blog, Weekly Update]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should confirm creation of a new blog post
+    about the weekly update.
+---
+prompt: |
+  List all blog posts in CDEMO
+expect:
+  text:
+    must_contain: [blog]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should list blog posts in the CDEMO space
+    including any demo blog posts.
+---
+prompt: |
+  Delete the User Guide page we created
+expect:
+  text:
+    must_contain: [delete, User Guide]
+    must_not_contain: [error, "not found"]
+  semantic: |
+    Response should confirm deletion of the User Guide page.
+---

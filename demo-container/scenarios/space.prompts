@@ -1,0 +1,59 @@
+# Space Scenario - Tests confluence-space skill
+# Space management operations
+#
+# Tool expectation pattern for conversation mode:
+# - First prompt: must_call [Skill] (loads context)
+# - Subsequent prompts: may use Bash for CLI operations
+---
+prompt: |
+  List all spaces I have access to
+expect:
+  tools:
+    must_call: [Skill]
+  text:
+    must_contain: [CDEMO]
+    must_not_contain: [error, "I don't have access", failed]
+  semantic: |
+    Response should list Confluence spaces including the CDEMO demo space.
+---
+prompt: |
+  Get details about the CDEMO space
+expect:
+  tools:
+    must_call: [Bash]
+  text:
+    must_contain: [CDEMO, Confluence Demo Space]
+    must_not_contain: [error, "not found"]
+  semantic: |
+    Response should show details about the CDEMO space
+    including its name, description, and key.
+---
+prompt: |
+  Show me the homepage of CDEMO space
+expect:
+  text:
+    must_contain: [CDEMO]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should show the homepage content of the CDEMO space
+    or indicate how to access it.
+---
+prompt: |
+  What permissions does the CDEMO space have?
+expect:
+  text:
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should show or describe space permissions,
+    including who can view and edit content.
+---
+prompt: |
+  How many pages are in the CDEMO space?
+expect:
+  text:
+    must_contain: [page]
+    must_not_contain: [error, failed]
+  semantic: |
+    Response should provide a count or list of pages
+    in the CDEMO space.
+---
