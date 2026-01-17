@@ -30,7 +30,7 @@ confluence-demo/
 | queue-manager | 3000 | WebSocket, session management, invites |
 | demo-container | 7681 | Claude terminal (ttyd, spawned per session) |
 | redis | 6379 | Session state, queue, invite tokens |
-| lgtm | 3000, 4317, 4318 | Grafana, Loki, Tempo (LGTM stack) |
+| lgtm | 3001 (Grafana), 4317, 4318 | Grafana, Loki, Tempo (LGTM stack) |
 
 ## Development Commands
 
@@ -103,6 +103,32 @@ make invite-revoke TOKEN=abc123
 | bulk | bulk.prompts | Bulk operations |
 | analytics | analytics.prompts | Views, watchers |
 
+## Claude Code Integration
+
+### Slash Commands
+
+Available via `.claude/commands/`:
+
+| Command | Description |
+|---------|-------------|
+| `/start-local` | Start local dev environment |
+| `/stop-local` | Stop local dev environment |
+| `/status-local` | Check local service status |
+| `/logs` | View all service logs |
+| `/otel-logs` | View observability stack logs |
+| `/test-skill-dev` | Run skill test (SCENARIO=page) |
+| `/refine-skill` | Run skill refinement loop |
+| `/queue-status-local` | Check queue manager status |
+| `/invite-local` | Generate local invite URL |
+| `/reset-sandbox` | Reset sandbox to clean state |
+| `/seed-sandbox` | Seed demo data |
+
+### Agents
+
+| Agent | Purpose |
+|-------|---------|
+| `skill-fix` | Analyze skill test failures and make targeted fixes |
+
 ## Configuration
 
 ### Environment Variables
@@ -124,15 +150,24 @@ CLAUDE_CODE_OAUTH_TOKEN=...  # or
 ANTHROPIC_API_KEY=...
 ```
 
-### macOS Keychain
+### Secure Token Storage
 
-Store Claude token securely:
-
+**macOS Keychain:**
 ```bash
 security add-generic-password -a "$USER" -s "CLAUDE_CODE_OAUTH_TOKEN" -w "<token>"
 ```
 
-The Makefile automatically retrieves it.
+**Linux (secret-tool):**
+```bash
+secret-tool store --label="Claude Code OAuth" service CLAUDE_CODE_OAUTH_TOKEN username "$USER"
+```
+
+**Environment variable (fallback):**
+```bash
+export CLAUDE_CODE_OAUTH_TOKEN="<token>"
+```
+
+The Makefile automatically retrieves from keychain/secret-tool when available.
 
 ## Project Conventions
 
@@ -199,6 +234,23 @@ make refine-skill SCENARIO=search MAX_ATTEMPTS=3
 
 Iteratively tests and fixes skills until passing.
 
+### Session Checkpointing
+
+The `skill-test.py` runner supports checkpointing for fast iteration:
+
+```bash
+# First run creates checkpoint after Claude initialization
+make test-skill-dev SCENARIO=page
+
+# Subsequent runs restore from checkpoint (skips 30s+ startup)
+make test-skill-dev SCENARIO=page PROMPT_INDEX=2
+
+# Clear checkpoints
+make clear-checkpoints
+```
+
+Checkpoints are stored in `/tmp/claude-checkpoints/` and automatically invalidate when the plugin or scenario changes.
+
 ## Observability
 
 ### Grafana Dashboards
@@ -243,10 +295,11 @@ make health
 
 ## Related Projects
 
-| Project | Path | Purpose |
-|---------|------|---------|
-| Confluence-Assistant-Skills | `/Users/jasonkrueger/IdeaProjects/Confluence-Assistant-Skills/` | Source plugin |
-| jira-demo | `/Users/jasonkrueger/IdeaProjects/jira-demo/` | Reference implementation |
+| Project | Repository | Purpose |
+|---------|------------|---------|
+| Confluence-Assistant-Skills | [GitHub](https://github.com/jasonkrueger/Confluence-Assistant-Skills) / [PyPI](https://pypi.org/project/confluence-assistant-skills-plugin/) | Source plugin |
+| confluence-assistant-skills-lib | [PyPI](https://pypi.org/project/confluence-assistant-skills-lib/) | Shared library |
+| jira-demo | [GitHub](https://github.com/jasonkrueger/jira-demo) | Reference implementation |
 
 ## Common Tasks
 
@@ -276,3 +329,80 @@ make test-skill-dev SCENARIO=page
 ```
 
 This mounts your local plugin source.
+
+## Troubleshooting
+
+### Common Issues
+
+**Container fails to start:**
+```bash
+# Check Docker is running
+docker info
+
+# Check for port conflicts
+lsof -i :3000 -i :3001 -i :8080
+
+# View container logs
+make logs
+```
+
+**Claude authentication fails:**
+```bash
+# Verify token is set
+echo $CLAUDE_CODE_OAUTH_TOKEN | head -c 20
+
+# Check keychain (macOS)
+security find-generic-password -s "CLAUDE_CODE_OAUTH_TOKEN" -w 2>/dev/null | head -c 20
+```
+
+**Skill test hangs:**
+```bash
+# Check if Claude is responsive
+make queue-status-local
+
+# Clear stale checkpoints
+rm -rf /tmp/claude-checkpoints/
+
+# Run with verbose output
+make test-skill-dev SCENARIO=page VERBOSE=1
+```
+
+**Confluence API errors:**
+```bash
+# Verify credentials
+curl -u "$CONFLUENCE_EMAIL:$CONFLUENCE_API_TOKEN" \
+  "$CONFLUENCE_SITE_URL/wiki/api/v2/spaces?limit=1"
+
+# Check rate limits (429 errors)
+# Wait 60 seconds and retry
+```
+
+**Redis connection issues:**
+```bash
+# Check Redis is running
+docker compose ps redis
+
+# Connect to Redis CLI
+docker compose exec redis redis-cli ping
+```
+
+### Debug Mode
+
+Enable verbose logging:
+
+```bash
+# All services
+DEBUG=* make dev
+
+# Specific service
+make logs-queue
+make logs-errors-local
+```
+
+### Reset Everything
+
+```bash
+# Nuclear option - removes all containers, volumes, checkpoints
+make clean-all
+make dev
+```
