@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confluence Assistant Skills - Live Demo</title>
+    <meta name="description" content="Try Confluence Assistant Skills live. Natural language Confluence automation with Claude Code.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                <img src="assets/logo.svg" alt="Confluence Assistant Skills" width="40" height="40">
+                <span>Confluence Assistant Skills</span>
+            </div>
+            <nav>
+                <a href="https://github.com/grandcamel/confluence-assistant-skills" target="_blank">GitHub</a>
+                <a href="https://github.com/grandcamel/confluence-assistant-skills#quick-start" target="_blank">Docs</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Invite Error (shown when invalid invite) -->
+    <section class="invite-error" id="invite-error" hidden>
+        <div class="error-icon">&#x26A0;</div>
+        <h2 id="error-title">Invalid Invite</h2>
+        <p id="error-message">This invite link is not valid.</p>
+        <a href="/" class="try-again-btn">Back to Home</a>
+    </section>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <h1>Talk to Confluence like you talk to a teammate</h1>
+        <p class="tagline">17 skills, 200+ scripts, zero CQL to memorize</p>
+
+        <!-- Queue Status -->
+        <div class="queue-status" id="queue-status">
+            <div class="status-indicator available" id="status-indicator">
+                <span class="dot"></span>
+                <span id="status-text">Checking availability...</span>
+            </div>
+        </div>
+
+        <!-- Start Demo Button -->
+        <button class="start-demo-btn" id="start-demo-btn" disabled>
+            <span class="btn-text">Start Demo</span>
+            <span class="btn-loading" hidden>Connecting...</span>
+        </button>
+
+        <!-- Queue Position (shown when waiting) -->
+        <div class="queue-position" id="queue-position" hidden>
+            <p>You're #<span id="position-number">1</span> in line</p>
+            <p class="wait-time">Estimated wait: <span id="wait-time">45 minutes</span></p>
+            <button class="leave-queue-btn" id="leave-queue-btn">Leave Queue</button>
+        </div>
+    </section>
+
+    <!-- Scenarios Section -->
+    <section class="scenarios">
+        <h2>Guided Scenarios</h2>
+        <p class="section-intro">Step-by-step walkthroughs to explore Confluence automation</p>
+
+        <div class="scenario-cards">
+            <div class="scenario-card">
+                <div class="card-icon">📝</div>
+                <h3>Page Management</h3>
+                <p>Create, read, update, and delete pages using natural language</p>
+                <span class="duration">~5 min</span>
+            </div>
+
+            <div class="scenario-card">
+                <div class="card-icon">🔍</div>
+                <h3>CQL Search</h3>
+                <p>Find content without memorizing CQL syntax</p>
+                <span class="duration">~5 min</span>
+            </div>
+
+            <div class="scenario-card">
+                <div class="card-icon">🏠</div>
+                <h3>Space Management</h3>
+                <p>Create and manage spaces, configure settings</p>
+                <span class="duration">~5 min</span>
+            </div>
+
+            <div class="scenario-card">
+                <div class="card-icon">🌳</div>
+                <h3>Page Hierarchy</h3>
+                <p>Navigate page trees, move and organize content</p>
+                <span class="duration">~7 min</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Sample Commands Section -->
+    <section class="commands">
+        <h2>What You Can Say</h2>
+
+        <div class="command-examples">
+            <div class="command">
+                <code>claude "Show me all pages in space CDEMO"</code>
+            </div>
+            <div class="command">
+                <code>claude "Create a new page called 'Meeting Notes' in CDEMO"</code>
+            </div>
+            <div class="command">
+                <code>claude "Search for pages with label 'documentation'"</code>
+            </div>
+            <div class="command">
+                <code>claude "What's the content of the Getting Started page?"</code>
+            </div>
+            <div class="command">
+                <code>claude "Add a comment to page 12345: Great work!"</code>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features">
+        <h2>What's Included</h2>
+
+        <div class="feature-grid">
+            <div class="feature">
+                <span class="feature-icon">🤖</span>
+                <h3>17 Confluence Skills</h3>
+                <p>Pages, search, spaces, templates, comments, attachments, and more</p>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">☁️</span>
+                <h3>Live Confluence Sandbox</h3>
+                <p>Pre-configured Atlassian Cloud instance with sample content</p>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">⏱️</span>
+                <h3>1 Hour Session</h3>
+                <p>Plenty of time to explore all capabilities</p>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">🔄</span>
+                <h3>Auto-Reset</h3>
+                <p>Sandbox resets after each session - experiment freely!</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <p>
+            <a href="https://github.com/grandcamel/confluence-assistant-skills" target="_blank">Confluence Assistant Skills</a>
+            &middot;
+            <a href="https://github.com/grandcamel/confluence-assistant-skills/blob/main/LICENSE" target="_blank">MIT License</a>
+            &middot;
+            Built with <a href="https://claude.ai/code" target="_blank">Claude Code</a>
+        </p>
+    </footer>
+
+    <!-- Terminal Overlay (shown when session active) -->
+    <div class="terminal-overlay" id="terminal-overlay" hidden>
+        <div class="terminal-header">
+            <span class="terminal-title">Confluence Assistant Skills Demo</span>
+            <nav class="terminal-nav">
+                <div class="dropdown">
+                    <button class="dropdown-btn">Scenarios ▾</button>
+                    <div class="dropdown-content">
+                        <a href="/scenarios/page" target="_blank">📝 Page Management</a>
+                        <a href="/scenarios/search" target="_blank">🔍 CQL Search</a>
+                        <a href="/scenarios/space" target="_blank">🏠 Spaces</a>
+                        <a href="/scenarios/hierarchy" target="_blank">🌳 Hierarchy</a>
+                        <a href="/scenarios/observability" target="_blank">📈 Observability</a>
+                    </div>
+                </div>
+                <a href="/grafana/" target="_blank" class="nav-link">📊 Dashboards</a>
+            </nav>
+            <span class="terminal-timer" id="terminal-timer">60:00</span>
+            <button class="terminal-close" id="terminal-close">End Session</button>
+        </div>
+        <iframe id="terminal-iframe" src=""></iframe>
+    </div>
+
+    <script src="queue-client.js"></script>
+</body>
+</html>

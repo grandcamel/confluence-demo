@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invite Required - Confluence Assistant Skills</title>
+    <style>
+        :root {
+            --deep-navy: #1a1a2e;
+            --dark-blue: #16213e;
+            --atlassian-blue: #0052CC;
+            --cyan: #00C7E6;
+            --light-gray: #e2e8f0;
+            --muted-gray: #94a3b8;
+            --white: #ffffff;
+            --error: #ef4444;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--deep-navy) 0%, var(--dark-blue) 100%);
+            color: var(--white);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem;
+        }
+        .error-icon {
+            font-size: 4rem;
+            color: var(--error);
+            margin-bottom: 1.5rem;
+        }
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: var(--error);
+        }
+        p {
+            color: var(--muted-gray);
+            font-size: 1.1rem;
+            max-width: 500px;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        .links {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        a {
+            display: inline-block;
+            color: var(--white);
+            text-decoration: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+        a.primary {
+            background: var(--atlassian-blue);
+        }
+        a.primary:hover {
+            background: #0065ff;
+        }
+        a.secondary {
+            border: 1px solid var(--muted-gray);
+        }
+        a.secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-icon">&#x1F512;</div>
+    <h1>Invite Required</h1>
+    <p>
+        You need a valid invite link to access the Confluence Assistant Skills demo.
+        Please contact the administrator to request an invite.
+    </p>
+    <div class="links">
+        <a href="https://github.com/grandcamel/confluence-assistant-skills" class="primary" target="_blank">
+            View on GitHub
+        </a>
+        <a href="https://github.com/grandcamel/confluence-assistant-skills#quick-start" class="secondary" target="_blank">
+            Documentation
+        </a>
+    </div>
+</body>
+</html>
