@@ -120,9 +120,9 @@ fi
 rm -rf ~/.claude/plugins 2>/dev/null || true
 # Use main branch to get latest
 claude plugin marketplace add https://github.com/grandcamel/confluence-assistant-skills.git#main >/dev/null 2>&1 || true
-claude plugin install confluence-assistant-skills@confluence-assistant-skills --scope user >/dev/null 2>&1 || true
+claude plugin install confluence-assistant-skills@confluence-assistant-skills-marketplace --scope user >/dev/null 2>&1 || true
 # Verify installation
-INSTALLED_VERSION=$(cat ~/.claude/plugins/cache/*/confluence-assistant-skills/*/plugin.json 2>/dev/null | jq -r '.version' | head -1)
+INSTALLED_VERSION=$(cat ~/.claude/plugins/cache/*/confluence-assistant-skills/*/.claude-plugin/plugin.json 2>/dev/null | jq -r '.version' | head -1)
 if [ -n "$INSTALLED_VERSION" ]; then
     echo -e "  ${GREEN}✓${NC} Claude plugin v${INSTALLED_VERSION} ready"
 else
