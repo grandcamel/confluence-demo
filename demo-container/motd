@@ -1,0 +1,18 @@
+
+  Confluence Assistant Skills Demo
+  ──────────────────────────────────────────────────────────────
+
+  Sandbox:   your-site.atlassian.net/wiki
+  Spaces:    CDEMO (Demo Space)
+  Session:   1 hour
+
+  Example prompts to try:
+
+    "Show me all pages in space CDEMO"
+    "Create a new page called 'Meeting Notes' in CDEMO"
+    "Search for pages with label 'documentation'"
+    "What's the content of the Getting Started page?"
+    "Add a comment to page 12345: Great work on this!"
+
+  ──────────────────────────────────────────────────────────────
+
