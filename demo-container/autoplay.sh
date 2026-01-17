@@ -713,50 +713,84 @@ run_claude_prompt() {
 }
 
 # =============================================================================
-# Prompts File Parsing (preserved from original)
+# Prompts File Parsing (YAML format support)
 # =============================================================================
 
 parse_prompts_file() {
     local file="$1"
-    local current_desc=""
     local current_prompt=""
     local in_prompt=false
+    local prompt_indent=""
 
     DESCRIPTIONS=()
     PROMPTS=()
 
     while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" =~ ^#\ description:\ (.+)$ ]]; then
-            # Save previous prompt if exists
+        # Skip comment lines
+        if [[ "$line" =~ ^# ]]; then
+            continue
+        fi
+
+        # Document separator - save current prompt and reset
+        if [[ "$line" == "---" ]]; then
             if [[ -n "$current_prompt" ]]; then
-                DESCRIPTIONS+=("$current_desc")
-                PROMPTS+=("${current_prompt%$'\n'}")
+                # Trim leading/trailing whitespace
+                current_prompt="${current_prompt#"${current_prompt%%[![:space:]]*}"}"
+                current_prompt="${current_prompt%"${current_prompt##*[![:space:]]}"}"
+                if [[ -n "$current_prompt" ]]; then
+                    DESCRIPTIONS+=("")
+                    PROMPTS+=("$current_prompt")
+                fi
             fi
-            current_desc="${BASH_REMATCH[1]}"
-            current_prompt=""
-            in_prompt=true
-        elif [[ "$line" == "---" ]]; then
-            # Separator - save current prompt
-            if [[ -n "$current_prompt" ]]; then
-                DESCRIPTIONS+=("$current_desc")
-                PROMPTS+=("${current_prompt%$'\n'}")
-            fi
-            current_desc=""
             current_prompt=""
             in_prompt=false
-        elif [[ "$in_prompt" == true ]]; then
-            # Accumulate prompt lines
+            prompt_indent=""
+            continue
+        fi
+
+        # Start of prompt block (YAML format: "prompt: |" or "prompt: >")
+        if [[ "$line" =~ ^prompt:\ *\|\ *$ ]] || [[ "$line" =~ ^prompt:\ *\>\ *$ ]]; then
+            in_prompt=true
+            prompt_indent=""
+            continue
+        fi
+
+        # Single-line prompt (YAML format: "prompt: some text")
+        if [[ "$line" =~ ^prompt:\ +(.+)$ ]]; then
+            current_prompt="${BASH_REMATCH[1]}"
+            in_prompt=false
+            continue
+        fi
+
+        # End of prompt block when we hit another YAML key
+        if [[ "$in_prompt" == true ]] && [[ "$line" =~ ^[a-z_]+: ]]; then
+            in_prompt=false
+            continue
+        fi
+
+        # Accumulate prompt lines (indented content under prompt: |)
+        if [[ "$in_prompt" == true ]]; then
+            # Detect indent on first content line
+            if [[ -z "$prompt_indent" ]] && [[ "$line" =~ ^([[:space:]]+) ]]; then
+                prompt_indent="${BASH_REMATCH[1]}"
+            fi
+            # Remove the indent prefix
+            local content="${line#$prompt_indent}"
             if [[ -n "$current_prompt" ]]; then
                 current_prompt+=$'\n'
             fi
-            current_prompt+="$line"
+            current_prompt+="$content"
         fi
     done < "$file"
 
     # Save last prompt if file doesn't end with ---
     if [[ -n "$current_prompt" ]]; then
-        DESCRIPTIONS+=("$current_desc")
-        PROMPTS+=("${current_prompt%$'\n'}")
+        current_prompt="${current_prompt#"${current_prompt%%[![:space:]]*}"}"
+        current_prompt="${current_prompt%"${current_prompt##*[![:space:]]}"}"
+        if [[ -n "$current_prompt" ]]; then
+            DESCRIPTIONS+=("")
+            PROMPTS+=("$current_prompt")
+        fi
     fi
 }
 
