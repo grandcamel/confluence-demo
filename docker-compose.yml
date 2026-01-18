@@ -1,5 +1,18 @@
 version: '3.8'
 
+# Shared logging configurations
+x-logging-standard: &logging-standard
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-logging-small: &logging-small
+  driver: json-file
+  options:
+    max-size: "5m"
+    max-file: "2"
+
 services:
   nginx:
     image: nginx:alpine
@@ -25,11 +38,7 @@ services:
     restart: unless-stopped
     networks:
       - demo-network
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging-standard
 
   queue-manager:
     build: ./queue-manager
@@ -59,11 +68,7 @@ services:
     restart: unless-stopped
     networks:
       - demo-network
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging-standard
 
   redis:
     image: redis:alpine
@@ -73,11 +78,7 @@ services:
     restart: unless-stopped
     networks:
       - demo-network
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "2"
+    logging: *logging-small
 
   lgtm:
     image: grafana/otel-lgtm:latest
@@ -102,11 +103,7 @@ services:
     restart: unless-stopped
     networks:
       - demo-network
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging-standard
 
   redis-exporter:
     image: oliver006/redis_exporter:latest
@@ -118,11 +115,7 @@ services:
     restart: unless-stopped
     networks:
       - demo-network
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "2"
+    logging: *logging-small
 
   promtail:
     image: grafana/promtail:latest
@@ -136,11 +129,7 @@ services:
     restart: unless-stopped
     networks:
       - demo-network
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "2"
+    logging: *logging-small
 
 networks:
   demo-network:
