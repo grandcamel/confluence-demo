@@ -20,14 +20,9 @@ import json
 import os
 import sys
 
-import requests
-from requests.auth import HTTPBasicAuth
+from confluence_base import ConfluenceClient, ConfluenceConfig, require_config
 
-# Configuration from environment
-SITE_URL = os.environ.get("CONFLUENCE_SITE_URL", "").rstrip("/")
-EMAIL = os.environ.get("CONFLUENCE_EMAIL", "")
-API_TOKEN = os.environ.get("CONFLUENCE_API_TOKEN", "")
-SPACE_KEY = os.environ.get("DEMO_SPACE_KEY", "CDEMO")
+# Additional configuration
 SPACE_NAME = os.environ.get("DEMO_SPACE_NAME", "Confluence Demo Space")
 
 # Demo content configuration
@@ -77,53 +72,6 @@ DEMO_PAGES = [
         ]
     }
 ]
-
-
-def get_auth():
-    """Get HTTP Basic Auth."""
-    return HTTPBasicAuth(EMAIL, API_TOKEN)
-
-
-def check_space_exists():
-    """Check if the demo space already exists."""
-    url = f"{SITE_URL}/wiki/api/v2/spaces"
-    params = {"keys": SPACE_KEY}
-
-    response = requests.get(url, auth=get_auth(), params=params)
-    if response.status_code == 200:
-        data = response.json()
-        if data.get("results"):
-            return data["results"][0]
-    return None
-
-
-def create_space():
-    """Create the demo space."""
-    url = f"{SITE_URL}/wiki/api/v2/spaces"
-
-    payload = {
-        "key": SPACE_KEY,
-        "name": SPACE_NAME,
-        "description": {
-            "plain": {
-                "value": "Demo space for Confluence Assistant Skills",
-                "representation": "plain"
-            }
-        }
-    }
-
-    response = requests.post(url, auth=get_auth(), json=payload)
-
-    if response.status_code == 200:
-        print(f"Created space: {SPACE_KEY}")
-        return response.json()
-    elif response.status_code == 409:
-        print(f"Space {SPACE_KEY} already exists")
-        return check_space_exists()
-    else:
-        print(f"Failed to create space: {response.status_code}")
-        print(response.text)
-        return None
 
 
 def markdown_to_adf(markdown_text):
@@ -183,10 +131,35 @@ def markdown_to_adf(markdown_text):
     }
 
 
-def create_page(space_id, title, body, parent_id=None, labels=None):
-    """Create a page in the space."""
-    url = f"{SITE_URL}/wiki/api/v2/pages"
+def create_space(client: ConfluenceClient, config: ConfluenceConfig):
+    """Create the demo space."""
+    payload = {
+        "key": config.space_key,
+        "name": SPACE_NAME,
+        "description": {
+            "plain": {
+                "value": "Demo space for Confluence Assistant Skills",
+                "representation": "plain"
+            }
+        }
+    }
 
+    response = client.post("/wiki/api/v2/spaces", json=payload)
+
+    if response.status_code == 200:
+        print(f"Created space: {config.space_key}")
+        return response.json()
+    elif response.status_code == 409:
+        print(f"Space {config.space_key} already exists")
+        return client.get_space()
+    else:
+        print(f"Failed to create space: {response.status_code}")
+        print(response.text)
+        return None
+
+
+def create_page(client: ConfluenceClient, space_id, title, body, parent_id=None, labels=None):
+    """Create a page in the space."""
     adf_body = markdown_to_adf(body)
 
     payload = {
@@ -202,7 +175,7 @@ def create_page(space_id, title, body, parent_id=None, labels=None):
     if parent_id:
         payload["parentId"] = parent_id
 
-    response = requests.post(url, auth=get_auth(), json=payload)
+    response = client.post("/wiki/api/v2/pages", json=payload)
 
     if response.status_code == 200:
         page = response.json()
@@ -210,7 +183,7 @@ def create_page(space_id, title, body, parent_id=None, labels=None):
 
         # Add labels if specified
         if labels:
-            add_labels(page["id"], labels)
+            add_labels(client, page["id"], labels)
 
         return page
     else:
@@ -219,13 +192,11 @@ def create_page(space_id, title, body, parent_id=None, labels=None):
         return None
 
 
-def add_labels(page_id, labels):
+def add_labels(client: ConfluenceClient, page_id, labels):
     """Add labels to a page."""
-    url = f"{SITE_URL}/wiki/api/v2/pages/{page_id}/labels"
-
     for label in labels:
         payload = {"name": label}
-        response = requests.post(url, auth=get_auth(), json=payload)
+        response = client.post(f"/wiki/api/v2/pages/{page_id}/labels", json=payload)
 
         if response.status_code == 200:
             print(f"    Added label: {label}")
@@ -233,13 +204,14 @@ def add_labels(page_id, labels):
             print(f"    Failed to add label '{label}': {response.status_code}")
 
 
-def create_demo_content(space_id):
+def create_demo_content(client: ConfluenceClient, space_id):
     """Create all demo pages and content."""
     print("\nCreating demo content...")
 
     for page_config in DEMO_PAGES:
         # Create root page
         page = create_page(
+            client,
             space_id,
             page_config["title"],
             page_config["body"],
@@ -250,6 +222,7 @@ def create_demo_content(space_id):
             # Create child pages
             for child_config in page_config["children"]:
                 create_page(
+                    client,
                     space_id,
                     child_config["title"],
                     child_config["body"],
@@ -263,34 +236,30 @@ def main():
     print("Confluence Demo Data Seeder")
     print("=" * 40)
 
-    # Validate configuration
-    if not all([SITE_URL, EMAIL, API_TOKEN]):
-        print("Error: Missing required environment variables")
-        print("  CONFLUENCE_SITE_URL:", "set" if SITE_URL else "missing")
-        print("  CONFLUENCE_EMAIL:", "set" if EMAIL else "missing")
-        print("  CONFLUENCE_API_TOKEN:", "set" if API_TOKEN else "missing")
-        sys.exit(1)
+    # Validate and get configuration
+    config = require_config()
+    client = ConfluenceClient(config)
 
-    print(f"Site: {SITE_URL}")
-    print(f"Space: {SPACE_KEY} ({SPACE_NAME})")
+    print(f"Site: {config.site_url}")
+    print(f"Space: {config.space_key} ({SPACE_NAME})")
 
     # Check if space exists
-    existing_space = check_space_exists()
+    existing_space = client.get_space()
     if existing_space:
-        print(f"\nSpace {SPACE_KEY} already exists (ID: {existing_space['id']})")
+        print(f"\nSpace {config.space_key} already exists (ID: {existing_space['id']})")
         space = existing_space
     else:
         # Create space
-        space = create_space()
+        space = create_space(client, config)
         if not space:
             print("Failed to create space")
             sys.exit(1)
 
     # Create demo content
-    create_demo_content(space["id"])
+    create_demo_content(client, space["id"])
 
     print("\nDemo data seeding complete!")
-    print(f"Visit: {SITE_URL}/wiki/spaces/{SPACE_KEY}")
+    print(f"Visit: {config.site_url}/wiki/spaces/{config.space_key}")
 
 
 if __name__ == "__main__":

@@ -19,54 +19,29 @@ Environment Variables:
 import os
 import sys
 
-import requests
-from requests.auth import HTTPBasicAuth
+from confluence_base import ConfluenceClient, require_config
 
-# Configuration from environment
-SITE_URL = os.environ.get("CONFLUENCE_SITE_URL", "").rstrip("/")
-EMAIL = os.environ.get("CONFLUENCE_EMAIL", "")
-API_TOKEN = os.environ.get("CONFLUENCE_API_TOKEN", "")
-SPACE_KEY = os.environ.get("DEMO_SPACE_KEY", "CDEMO")
+# Additional configuration
 PRESERVE_LABEL = os.environ.get("DEMO_PRESERVE_LABEL", "demo")
 
 
-def get_auth():
-    """Get HTTP Basic Auth."""
-    return HTTPBasicAuth(EMAIL, API_TOKEN)
-
-
-def get_space_id():
-    """Get the space ID for the demo space."""
-    url = f"{SITE_URL}/wiki/api/v2/spaces"
-    params = {"keys": SPACE_KEY}
-
-    response = requests.get(url, auth=get_auth(), params=params)
-    if response.status_code == 200:
-        data = response.json()
-        if data.get("results"):
-            return data["results"][0]["id"]
-    return None
-
-
-def get_page_labels(page_id):
+def get_page_labels(client: ConfluenceClient, page_id):
     """Get labels for a page."""
-    url = f"{SITE_URL}/wiki/api/v2/pages/{page_id}/labels"
-
-    response = requests.get(url, auth=get_auth())
+    response = client.get(f"/wiki/api/v2/pages/{page_id}/labels")
     if response.status_code == 200:
         data = response.json()
         return [label["name"] for label in data.get("results", [])]
     return []
 
 
-def get_all_pages(space_id):
+def get_all_pages(client: ConfluenceClient, space_id):
     """Get all pages in the space."""
     pages = []
-    url = f"{SITE_URL}/wiki/api/v2/spaces/{space_id}/pages"
+    endpoint = f"/wiki/api/v2/spaces/{space_id}/pages"
     params = {"limit": 100}
 
-    while url:
-        response = requests.get(url, auth=get_auth(), params=params)
+    while endpoint:
+        response = client.get(endpoint, params=params)
         if response.status_code != 200:
             print(f"Failed to get pages: {response.status_code}")
             break
@@ -76,36 +51,32 @@ def get_all_pages(space_id):
 
         # Handle pagination
         links = data.get("_links", {})
-        url = links.get("next")
-        if url:
-            url = f"{SITE_URL}{url}"
+        next_link = links.get("next")
+        if next_link:
+            endpoint = next_link
             params = {}  # Next URL includes params
+        else:
+            endpoint = None
 
     return pages
 
 
-def delete_page(page_id):
+def delete_page(client: ConfluenceClient, page_id):
     """Delete a page."""
-    url = f"{SITE_URL}/wiki/api/v2/pages/{page_id}"
-
-    response = requests.delete(url, auth=get_auth())
+    response = client.delete(f"/wiki/api/v2/pages/{page_id}")
     return response.status_code in [200, 204]
 
 
-def delete_comments(page_id):
+def delete_comments(client: ConfluenceClient, page_id):
     """Delete all comments from a page."""
-    # Get footer comments
-    url = f"{SITE_URL}/wiki/api/v2/pages/{page_id}/footer-comments"
-
-    response = requests.get(url, auth=get_auth())
+    response = client.get(f"/wiki/api/v2/pages/{page_id}/footer-comments")
     if response.status_code != 200:
         return
 
     data = response.json()
     for comment in data.get("results", []):
         comment_id = comment["id"]
-        delete_url = f"{SITE_URL}/wiki/api/v2/footer-comments/{comment_id}"
-        requests.delete(delete_url, auth=get_auth())
+        client.delete(f"/wiki/api/v2/footer-comments/{comment_id}")
         print(f"    Deleted comment: {comment_id}")
 
 
@@ -114,25 +85,24 @@ def cleanup_sandbox():
     print("Confluence Demo Sandbox Cleanup")
     print("=" * 40)
 
-    # Validate configuration
-    if not all([SITE_URL, EMAIL, API_TOKEN]):
-        print("Error: Missing required environment variables")
-        sys.exit(1)
+    # Validate and get configuration
+    config = require_config()
+    client = ConfluenceClient(config)
 
-    print(f"Site: {SITE_URL}")
-    print(f"Space: {SPACE_KEY}")
+    print(f"Site: {config.site_url}")
+    print(f"Space: {config.space_key}")
     print(f"Preserving pages with label: {PRESERVE_LABEL}")
 
     # Get space ID
-    space_id = get_space_id()
+    space_id = client.get_space_id()
     if not space_id:
-        print(f"\nSpace {SPACE_KEY} not found")
+        print(f"\nSpace {config.space_key} not found")
         sys.exit(1)
 
     print(f"\nSpace ID: {space_id}")
 
     # Get all pages
-    pages = get_all_pages(space_id)
+    pages = get_all_pages(client, space_id)
     print(f"Found {len(pages)} pages")
 
     # Categorize pages
@@ -140,12 +110,12 @@ def cleanup_sandbox():
     to_delete = []
 
     for page in pages:
-        labels = get_page_labels(page["id"])
+        labels = get_page_labels(client, page["id"])
         if PRESERVE_LABEL in labels:
             preserved.append(page)
             # Clean up comments on preserved pages
             print(f"  Preserving: {page['title']}")
-            delete_comments(page["id"])
+            delete_comments(client, page["id"])
         else:
             to_delete.append(page)
 
@@ -163,7 +133,7 @@ def cleanup_sandbox():
     deleted_count = 0
     for page in to_delete_sorted:
         print(f"  Deleting: {page['title']} (ID: {page['id']})")
-        if delete_page(page["id"]):
+        if delete_page(client, page["id"]):
             deleted_count += 1
         else:
             print(f"    Failed to delete {page['title']}")
