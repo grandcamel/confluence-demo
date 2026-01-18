@@ -125,6 +125,26 @@ CLAUDE_AUTH_ENV = $(if $(CLAUDE_CODE_OAUTH_TOKEN),-e CLAUDE_CODE_OAUTH_TOKEN=$(C
 # Telemetry env vars for LGTM stack
 TELEMETRY_ENV_VARS = -e OTEL_EXPORTER_OTLP_ENDPOINT=http://lgtm:4318 -e LOKI_ENDPOINT=http://lgtm:3100
 
+# Confluence API env vars
+CONFLUENCE_ENV_VARS = -e CONFLUENCE_API_TOKEN=$(CONFLUENCE_API_TOKEN) -e CONFLUENCE_EMAIL=$(CONFLUENCE_EMAIL) -e CONFLUENCE_SITE_URL=$(CONFLUENCE_SITE_URL)
+
+# Simple docker run for skill tests (no local mounts, uses container's built-in files)
+# Parameters: $(1) = extra env vars, $(2) = extra test args
+define skill_test_run
+	docker run --rm \
+		--network $(DEMO_NETWORK) \
+		$(1) \
+		$(TELEMETRY_ENV_VARS) \
+		$(CLAUDE_AUTH_ENV) \
+		confluence-demo-container:latest \
+		python /workspace/skill-test.py /workspace/scenarios/$(SCENARIO).prompts \
+			--model $(or $(MODEL),sonnet) \
+			--judge-model $(or $(JUDGE_MODEL),haiku) \
+			$(2) \
+			$(if $(VERBOSE),--verbose,) \
+			$(if $(JSON),--json,)
+endef
+
 # Common docker run command for skill tests with local mounts
 # Parameters: $(1) = extra env vars, $(2) = extra volumes, $(3) = extra test args
 define skill_test_docker_run
@@ -268,19 +288,7 @@ traces-errors-local:
 test-skill:
 	@if [ -z "$(SCENARIO)" ]; then echo "Usage: make test-skill SCENARIO=<name> [MODEL=sonnet] [JUDGE_MODEL=haiku] [VERBOSE=1]"; exit 1; fi
 	$(call check_claude_auth)
-	docker run --rm \
-		--network $(DEMO_NETWORK) \
-		-e CONFLUENCE_API_TOKEN=$(CONFLUENCE_API_TOKEN) \
-		-e CONFLUENCE_EMAIL=$(CONFLUENCE_EMAIL) \
-		-e CONFLUENCE_SITE_URL=$(CONFLUENCE_SITE_URL) \
-		$(TELEMETRY_ENV_VARS) \
-		$(CLAUDE_AUTH_ENV) \
-		confluence-demo-container:latest \
-		python /workspace/skill-test.py /workspace/scenarios/$(SCENARIO).prompts \
-			--model $(or $(MODEL),sonnet) \
-			--judge-model $(or $(JUDGE_MODEL),haiku) \
-			$(if $(VERBOSE),--verbose,) \
-			$(if $(JSON),--json,)
+	$(call skill_test_run,$(CONFLUENCE_ENV_VARS),)
 
 # Fast skill testing with local source mounts (no rebuild needed)
 # CONFLUENCE_SKILLS_PATH: Path to Confluence-Assistant-Skills repo root
@@ -303,25 +311,14 @@ test-skill-dev:
 	@if [ ! -d "$(CONFLUENCE_PLUGIN_PATH)" ]; then echo "Error: Plugin not found at $(CONFLUENCE_PLUGIN_PATH)"; exit 1; fi
 	$(call check_claude_auth)
 	@mkdir -p $(CLAUDE_SESSIONS_DIR) $(CHECKPOINTS_DIR)
-	@$(call skill_test_docker_run,-e CONFLUENCE_API_TOKEN=$(CONFLUENCE_API_TOKEN) -e CONFLUENCE_EMAIL=$(CONFLUENCE_EMAIL) -e CONFLUENCE_SITE_URL=$(CONFLUENCE_SITE_URL),,)
+	@$(call skill_test_docker_run,$(CONFLUENCE_ENV_VARS),,)
 
 # Run skill test with mocked Confluence API (fast, deterministic)
 # Usage: make test-skill-mock SCENARIO=search
 test-skill-mock:
 	@if [ -z "$(SCENARIO)" ]; then echo "Usage: make test-skill-mock SCENARIO=<name> [MODEL=sonnet] [JUDGE_MODEL=haiku]"; exit 1; fi
 	$(call check_claude_auth)
-	docker run --rm \
-		--network $(DEMO_NETWORK) \
-		-e CONFLUENCE_MOCK_MODE=true \
-		$(TELEMETRY_ENV_VARS) \
-		$(CLAUDE_AUTH_ENV) \
-		confluence-demo-container:latest \
-		python /workspace/skill-test.py /workspace/scenarios/$(SCENARIO).prompts \
-			--model $(or $(MODEL),sonnet) \
-			--judge-model $(or $(JUDGE_MODEL),haiku) \
-			--mock \
-			$(if $(VERBOSE),--verbose,) \
-			$(if $(JSON),--json,)
+	$(call skill_test_run,-e CONFLUENCE_MOCK_MODE=true,--mock)
 
 # Fast dev iteration with mocks and local source mounts
 # Usage: make test-skill-mock-dev SCENARIO=search
