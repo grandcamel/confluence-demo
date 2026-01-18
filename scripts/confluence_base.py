@@ -14,9 +14,78 @@ Environment Variables:
 
 import os
 import sys
+import time
+from functools import wraps
 
 import requests
 from requests.auth import HTTPBasicAuth
+
+# Retry configuration
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_BASE_DELAY = 1.0  # seconds
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+def retry_on_failure(max_retries: int = DEFAULT_MAX_RETRIES, base_delay: float = DEFAULT_BASE_DELAY):
+    """
+    Decorator for retrying API calls with exponential backoff.
+
+    Handles:
+    - 429 Too Many Requests (rate limiting)
+    - 5xx Server errors (transient failures)
+    - Connection errors
+
+    Args:
+        max_retries: Maximum number of retry attempts
+        base_delay: Initial delay between retries (doubles each attempt)
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_retries + 1):
+                try:
+                    response = func(*args, **kwargs)
+                    if response.status_code not in RETRYABLE_STATUS_CODES:
+                        return response
+
+                    # Retryable status code
+                    if attempt < max_retries:
+                        delay = base_delay * (2 ** attempt)
+                        # Respect Retry-After header if present
+                        if response.status_code == 429:
+                            retry_after = response.headers.get("Retry-After")
+                            if retry_after:
+                                delay = max(delay, float(retry_after))
+                        print(f"  Retry {attempt + 1}/{max_retries} after {delay:.1f}s (status {response.status_code})")
+                        time.sleep(delay)
+                    else:
+                        return response
+
+                except requests.exceptions.ConnectionError as e:
+                    last_exception = e
+                    if attempt < max_retries:
+                        delay = base_delay * (2 ** attempt)
+                        print(f"  Retry {attempt + 1}/{max_retries} after {delay:.1f}s (connection error)")
+                        time.sleep(delay)
+                    else:
+                        raise
+                except requests.exceptions.Timeout as e:
+                    last_exception = e
+                    if attempt < max_retries:
+                        delay = base_delay * (2 ** attempt)
+                        print(f"  Retry {attempt + 1}/{max_retries} after {delay:.1f}s (timeout)")
+                        time.sleep(delay)
+                    else:
+                        raise
+
+            # Should not reach here, but just in case
+            if last_exception:
+                raise last_exception
+            return response
+
+        return wrapper
+    return decorator
 
 
 class ConfluenceConfig:
@@ -51,20 +120,23 @@ class ConfluenceClient:
         """Get HTTP Basic Auth for requests."""
         return self._auth
 
+    @retry_on_failure()
     def get(self, endpoint: str, params: dict | None = None) -> requests.Response:
-        """Make GET request to Confluence API."""
+        """Make GET request to Confluence API with automatic retry."""
         url = f"{self.config.site_url}{endpoint}"
-        return requests.get(url, auth=self.auth, params=params)
+        return requests.get(url, auth=self.auth, params=params, timeout=30)
 
+    @retry_on_failure()
     def post(self, endpoint: str, json: dict | None = None) -> requests.Response:
-        """Make POST request to Confluence API."""
+        """Make POST request to Confluence API with automatic retry."""
         url = f"{self.config.site_url}{endpoint}"
-        return requests.post(url, auth=self.auth, json=json)
+        return requests.post(url, auth=self.auth, json=json, timeout=30)
 
+    @retry_on_failure()
     def delete(self, endpoint: str) -> requests.Response:
-        """Make DELETE request to Confluence API."""
+        """Make DELETE request to Confluence API with automatic retry."""
         url = f"{self.config.site_url}{endpoint}"
-        return requests.delete(url, auth=self.auth)
+        return requests.delete(url, auth=self.auth, timeout=30)
 
     def get_space(self, space_key: str | None = None) -> dict | None:
         """Get space by key. Returns space dict or None if not found."""
