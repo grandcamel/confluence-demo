@@ -26,7 +26,6 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const Redis = require('ioredis');
-const Docker = require('dockerode');
 const { v4: uuidv4 } = require('uuid');
 const { spawn } = require('child_process');
 const crypto = require('crypto');
@@ -122,7 +121,6 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/api/ws' });
 const redis = new Redis(REDIS_URL);
-const _docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
 // State
 const clients = new Map(); // ws -> { id, state, joinedAt, ip, userAgent, inviteToken }
@@ -641,18 +639,6 @@ function generateSessionToken(sessionId) {
     .update(data)
     .digest('hex');
   return `${Buffer.from(data).toString('base64')}.${signature}`;
-}
-
-function _setSessionCookie(ws, sessionId) {
-  const token = generateSessionToken(sessionId);
-  sessionTokens.set(token, sessionId);
-
-  const client = clients.get(ws);
-  if (client) {
-    client.sessionToken = token;
-  }
-
-  return token;
 }
 
 function clearSessionToken(sessionToken) {
