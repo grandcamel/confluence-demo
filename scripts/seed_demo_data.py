@@ -16,9 +16,10 @@ Environment Variables:
     DEMO_SPACE_NAME: Space name (default: Confluence Demo Space)
 """
 
+import json
 import os
 import sys
-import json
+
 import requests
 from requests.auth import HTTPBasicAuth
 

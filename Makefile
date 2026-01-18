@@ -2,7 +2,8 @@
 	invite invite-list invite-info invite-revoke ssl-setup ssl-renew shell-queue shell-demo \
 	test-landing test-terminal run-scenario test-skill test-skill-dev test-skill-mock test-skill-mock-dev refine-skill test-all-mocks refine-all-mocks \
 	status-local health-local start-local stop-local restart-local queue-status-local queue-reset-local invite-local \
-	logs-errors-local traces-errors-local help
+	logs-errors-local traces-errors-local help \
+	lint lint-js lint-py lint-fix lint-fix-js lint-fix-py
 
 # Docker network for telemetry (external network shared with compose)
 DEMO_NETWORK ?= demo-telemetry-network
@@ -377,6 +378,27 @@ refine-all-mocks:
 		--output-dir $(PWD) \
 		$(if $(VERBOSE),--verbose,)
 
+# Linting
+lint: lint-js lint-py
+
+lint-js:
+	@echo "Linting JavaScript..."
+	cd queue-manager && npm run lint
+
+lint-py:
+	@echo "Linting Python..."
+	ruff check scripts/ demo-container/*.py
+
+lint-fix: lint-fix-js lint-fix-py
+
+lint-fix-js:
+	@echo "Fixing JavaScript..."
+	cd queue-manager && npm run lint:fix
+
+lint-fix-py:
+	@echo "Fixing Python..."
+	ruff check --fix scripts/ demo-container/*.py
+
 # Help
 help:
 	@echo "Confluence Demo Management Commands"
@@ -426,6 +448,14 @@ help:
 	@echo "  make test-all-mocks SCENARIOS=search,page - Run specific scenarios"
 	@echo "  make refine-all-mocks                 - Parallel refine loops (5 retries each)"
 	@echo "  make refine-all-mocks SCENARIOS=search,page MAX_ATTEMPTS=5"
+	@echo ""
+	@echo "Linting:"
+	@echo "  make lint           - Run all linters (JS + Python)"
+	@echo "  make lint-js        - Lint JavaScript (queue-manager)"
+	@echo "  make lint-py        - Lint Python (scripts, demo-container)"
+	@echo "  make lint-fix       - Fix all linting issues"
+	@echo "  make lint-fix-js    - Fix JavaScript issues"
+	@echo "  make lint-fix-py    - Fix Python issues"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  make clean          - Remove all containers and volumes"

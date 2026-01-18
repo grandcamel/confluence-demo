@@ -42,7 +42,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import requests
 import yaml  # type: ignore[import-untyped]
@@ -65,21 +65,21 @@ except ImportError:
     OTEL_AVAILABLE = False
 
 # Module-level tracer and config
-_tracer: Optional[Any] = None
-_loki_endpoint: Optional[str] = None
+_tracer: Any | None = None
+_loki_endpoint: str | None = None
 _debug_enabled: bool = True
 _scenario_name: str = "unknown"
 
 
 # Module-level provider for shutdown
-_trace_provider: Optional[Any] = None
+_trace_provider: Any | None = None
 
 
 def init_telemetry(
     service_name: str = "skill-test",
     scenario: str = "unknown",
     debug: bool = True,
-) -> Optional[Any]:
+) -> Any | None:
     """Initialize OpenTelemetry tracing and Loki logging."""
     global _tracer, _loki_endpoint, _debug_enabled, _scenario_name, _trace_provider
 
@@ -144,8 +144,8 @@ def shutdown_telemetry() -> None:
 def log_to_loki(
     message: str,
     level: str = "info",
-    labels: Optional[dict] = None,
-    extra: Optional[dict] = None,
+    labels: dict | None = None,
+    extra: dict | None = None,
 ) -> None:
     """Send a log entry to Loki."""
     if not _debug_enabled or not _loki_endpoint:
@@ -200,7 +200,7 @@ def _set_span_attribute(span, key: str, value) -> None:
 @contextmanager
 def trace_span(
     name: str,
-    attributes: Optional[dict] = None,
+    attributes: dict | None = None,
     record_exception: bool = True,
 ):
     """Context manager for creating trace spans with timing."""
@@ -238,7 +238,7 @@ def _load_checkpoints_file(checkpoint_file: Path) -> dict:
         return {}
     try:
         return json.loads(checkpoint_file.read_text())
-    except (json.JSONDecodeError, IOError):
+    except (OSError, json.JSONDecodeError):
         return {}
 
 

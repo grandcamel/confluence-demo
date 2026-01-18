@@ -39,7 +39,7 @@ try {
   const api = require('@opentelemetry/api');
   metrics = api.metrics;
   trace = api.trace;
-} catch (e) {
+} catch (_e) {
   // OTel not available, will use no-op implementations
 }
 
@@ -122,7 +122,7 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/api/ws' });
 const redis = new Redis(REDIS_URL);
-const docker = new Docker({ socketPath: '/var/run/docker.sock' });
+const _docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
 // State
 const clients = new Map(); // ws -> { id, state, joinedAt, ip, userAgent, inviteToken }
@@ -440,7 +440,7 @@ wss.on('connection', (ws, req) => {
     try {
       const message = JSON.parse(data);
       console.log("Received message:", message); handleMessage(ws, message);
-    } catch (err) {
+    } catch (_err) {
       sendError(ws, 'Invalid message format');
     }
   });
@@ -643,7 +643,7 @@ function generateSessionToken(sessionId) {
   return `${Buffer.from(data).toString('base64')}.${signature}`;
 }
 
-function setSessionCookie(ws, sessionId) {
+function _setSessionCookie(ws, sessionId) {
   const token = generateSessionToken(sessionId);
   sessionTokens.set(token, sessionId);
 

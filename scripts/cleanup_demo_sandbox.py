@@ -18,6 +18,7 @@ Environment Variables:
 
 import os
 import sys
+
 import requests
 from requests.auth import HTTPBasicAuth
 
@@ -167,7 +168,7 @@ def cleanup_sandbox():
         else:
             print(f"    Failed to delete {page['title']}")
 
-    print(f"\nCleanup complete!")
+    print("\nCleanup complete!")
     print(f"  Deleted: {deleted_count} pages")
     print(f"  Preserved: {len(preserved)} pages")
 
