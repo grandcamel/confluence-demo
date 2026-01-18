@@ -134,12 +134,18 @@ const DISCONNECT_GRACE_MS = 10000; // 10 seconds grace period for page refresh
 // Invite audit retention (30 days after expiration)
 const AUDIT_RETENTION_DAYS = 30;
 
+// Load HTML template at startup (cached)
+const scenarioTemplate = fs.readFileSync(path.join(__dirname, 'templates', 'scenario.html'), 'utf8');
+
 // =============================================================================
 // Express Routes
 // =============================================================================
 
 app.use(express.json());
 app.use(cookieParser());
+
+// Serve static files (CSS, JS)
+app.use('/static', express.static(path.join(__dirname, 'static')));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -240,174 +246,11 @@ app.get('/api/scenarios/:name', (req, res) => {
 
     const htmlContent = marked(markdown);
 
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${scenario.icon} ${scenario.title} - Confluence Assistant Skills</title>
-  <style>
-    :root {
-      --deep-navy: #1a1a2e;
-      --dark-blue: #16213e;
-      --atlassian-blue: #0052CC;
-      --cyan: #00C7E6;
-      --light-gray: #e2e8f0;
-      --muted-gray: #94a3b8;
-      --white: #ffffff;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, var(--deep-navy) 0%, var(--dark-blue) 100%);
-      color: var(--light-gray);
-      min-height: 100vh;
-      line-height: 1.7;
-    }
-    header {
-      background: rgba(26, 26, 46, 0.95);
-      backdrop-filter: blur(10px);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      padding: 1rem 2rem;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-    header a {
-      color: var(--muted-gray);
-      text-decoration: none;
-      font-size: 0.9rem;
-    }
-    header a:hover { color: var(--white); }
-    .header-content {
-      max-width: 900px;
-      margin: 0 auto;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .header-title {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: var(--white);
-    }
-    main {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 3rem 2rem;
-    }
-    h1 { font-size: 2rem; margin-bottom: 1.5rem; color: var(--white); }
-    h2 { font-size: 1.5rem; margin: 2rem 0 1rem; color: var(--white); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; }
-    h3 { font-size: 1.2rem; margin: 1.5rem 0 0.75rem; color: var(--cyan); }
-    p { margin: 1rem 0; }
-    ul, ol { margin: 1rem 0 1rem 1.5rem; }
-    li { margin: 0.5rem 0; }
-    code {
-      font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
-      background: rgba(0, 0, 0, 0.3);
-      padding: 0.2rem 0.4rem;
-      border-radius: 4px;
-      font-size: 0.9em;
-      color: var(--cyan);
-    }
-    pre {
-      background: rgba(0, 0, 0, 0.4);
-      padding: 1rem 1.5rem;
-      border-radius: 8px;
-      overflow-x: auto;
-      margin: 1rem 0;
-      border-left: 3px solid var(--atlassian-blue);
-    }
-    pre code {
-      background: none;
-      padding: 0;
-      color: var(--light-gray);
-    }
-    .code-block-wrapper { position: relative; }
-    .copy-btn {
-      position: absolute;
-      top: 0.5rem;
-      right: 0.5rem;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      color: var(--muted-gray);
-      padding: 0.3rem 0.6rem;
-      border-radius: 4px;
-      font-size: 0.75rem;
-      cursor: pointer;
-      opacity: 0;
-      transition: opacity 0.2s, background 0.2s, color 0.2s;
-    }
-    .code-block-wrapper:hover .copy-btn { opacity: 1; }
-    .copy-btn:hover {
-      background: rgba(255, 255, 255, 0.2);
-      color: var(--white);
-    }
-    .copy-btn.copied {
-      background: rgba(0, 199, 230, 0.3);
-      color: var(--cyan);
-      border-color: var(--cyan);
-    }
-    blockquote {
-      border-left: 3px solid var(--cyan);
-      padding-left: 1rem;
-      margin: 1rem 0;
-      color: var(--muted-gray);
-      font-style: italic;
-    }
-    a { color: var(--cyan); }
-    a:hover { color: var(--white); }
-    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
-    th, td { border: 1px solid rgba(255,255,255,0.1); padding: 0.75rem; text-align: left; }
-    th { background: rgba(0, 82, 204, 0.2); color: var(--white); }
-    tr:nth-child(even) { background: rgba(255,255,255,0.02); }
-    hr { border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 2rem 0; }
-    .nav-links { display: flex; gap: 1.5rem; flex-wrap: wrap; }
-  </style>
-</head>
-<body>
-  <header>
-    <div class="header-content">
-      <span class="header-title">${scenario.icon} ${scenario.title}</span>
-      <nav class="nav-links">
-        <a href="/scenarios/page">📝 Pages</a>
-        <a href="/scenarios/search">🔍 Search</a>
-        <a href="/scenarios/space">🏠 Spaces</a>
-        <a href="/scenarios/hierarchy">🌳 Hierarchy</a>
-        <a href="/scenarios/observability">📈 Observability</a>
-      </nav>
-    </div>
-  </header>
-  <main>
-    ${htmlContent}
-  </main>
-  <script>
-    document.querySelectorAll('pre').forEach(pre => {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'code-block-wrapper';
-      pre.parentNode.insertBefore(wrapper, pre);
-      wrapper.appendChild(pre);
-      const btn = document.createElement('button');
-      btn.className = 'copy-btn';
-      btn.textContent = 'Copy';
-      wrapper.appendChild(btn);
-      btn.addEventListener('click', async () => {
-        const code = pre.querySelector('code');
-        const text = code ? code.textContent : pre.textContent;
-        try {
-          await navigator.clipboard.writeText(text.trim());
-          btn.textContent = 'Copied!';
-          btn.classList.add('copied');
-          setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
-        } catch (err) {
-          btn.textContent = 'Failed';
-          setTimeout(() => btn.textContent = 'Copy', 2000);
-        }
-      });
-    });
-  </script>
-</body>
-</html>`;
+    // Render template with substitutions
+    const html = scenarioTemplate
+      .replace(/\{\{ICON\}\}/g, scenario.icon)
+      .replace(/\{\{TITLE\}\}/g, scenario.title)
+      .replace(/\{\{CONTENT\}\}/g, htmlContent);
 
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
