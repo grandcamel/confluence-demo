@@ -30,6 +30,7 @@ const { v4: uuidv4 } = require('uuid');
 const { spawn } = require('child_process');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
+const helmet = require('helmet');
 const { marked } = require('marked');
 
 // OpenTelemetry imports (only if available)
@@ -56,6 +57,11 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'change-me-in-production';
 // Host path for session env files (for --env-file in spawned containers)
 const SESSION_ENV_HOST_PATH = process.env.SESSION_ENV_HOST_PATH || '/tmp/session-env';
 const SESSION_ENV_CONTAINER_PATH = '/run/session-env';
+// Base URL and allowed origins for CORS/WebSocket validation
+const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || BASE_URL).split(',').map(o => o.trim());
+// Cookie security settings
+const COOKIE_SECURE = process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true';
 
 // Validate SESSION_SECRET in production
 if (SESSION_SECRET === 'change-me-in-production' && process.env.NODE_ENV === 'production') {
@@ -159,6 +165,23 @@ const scenarioTemplate = fs.readFileSync(path.join(__dirname, 'templates', 'scen
 app.use(express.json());
 app.use(cookieParser());
 
+// Security headers via Helmet
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],  // Terminal requires inline scripts
+      styleSrc: ["'self'", "'unsafe-inline'"],   // Allow inline styles
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", "wss:", "ws:"],     // WebSocket connections
+      frameSrc: ["'self'"],                      // Terminal iframe
+      frameAncestors: ["'self'"],
+    }
+  },
+  crossOriginEmbedderPolicy: false,  // Allow terminal iframe
+  crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+}));
+
 // Serve static files (CSS, JS)
 app.use('/static', express.static(path.join(__dirname, 'static')));
 
@@ -195,6 +218,45 @@ app.get('/api/session/validate', (req, res) => {
   }
 
   return res.status(401).send('Session not active');
+});
+
+// Set session cookie with secure attributes (called by client after receiving token via WebSocket)
+app.post('/api/session/cookie', (req, res) => {
+  const { token } = req.body;
+
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ error: 'Token required' });
+  }
+
+  // Verify token is valid (either active or pending)
+  const isActiveToken = sessionTokens.has(token);
+  const isPendingToken = pendingSessionTokens.has(token);
+
+  if (!isActiveToken && !isPendingToken) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+
+  // Set secure cookie
+  res.cookie('demo_session', token, {
+    httpOnly: true,                    // Not accessible via JavaScript
+    secure: COOKIE_SECURE,             // HTTPS only in production
+    sameSite: 'strict',                // Strict CSRF protection
+    maxAge: SESSION_TIMEOUT_MINUTES * 60 * 1000,
+    path: '/'
+  });
+
+  res.json({ success: true });
+});
+
+// Clear session cookie endpoint
+app.post('/api/session/logout', (req, res) => {
+  res.clearCookie('demo_session', {
+    httpOnly: true,
+    secure: COOKIE_SECURE,
+    sameSite: 'strict',
+    path: '/'
+  });
+  res.json({ success: true });
 });
 
 // Queue status (public)
@@ -262,7 +324,15 @@ app.get('/api/scenarios/:name', (req, res) => {
 
   const filePath = path.join(SCENARIOS_PATH, scenario.file);
 
-  fs.readFile(filePath, 'utf8', (err, markdown) => {
+  // Path traversal protection: ensure resolved path is within SCENARIOS_PATH
+  const resolvedPath = path.resolve(filePath);
+  const resolvedBase = path.resolve(SCENARIOS_PATH);
+  if (!resolvedPath.startsWith(resolvedBase + path.sep) && resolvedPath !== resolvedBase) {
+    console.error(`Path traversal attempt blocked: ${filePath} resolved to ${resolvedPath}`);
+    return res.status(400).json({ error: 'Invalid path' });
+  }
+
+  fs.readFile(resolvedPath, 'utf8', (err, markdown) => {
     if (err) {
       console.error(`Error reading scenario ${scenarioName}:`, err);
       return res.status(404).json({ error: 'Scenario file not found' });
@@ -334,6 +404,14 @@ wss.on('connection', (ws, req) => {
   if (!rateLimit.allowed) {
     console.log(`Rate limit exceeded for ${clientIp}, rejecting connection`);
     ws.close(1008, `Rate limit exceeded. Retry after ${rateLimit.retryAfter} seconds.`);
+    return;
+  }
+
+  // Validate WebSocket origin to prevent CSRF attacks
+  const origin = req.headers.origin;
+  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+    console.log(`WebSocket connection rejected: invalid origin ${origin}`);
+    ws.close(1008, 'Origin not allowed');
     return;
   }
 

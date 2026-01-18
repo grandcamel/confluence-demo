@@ -70,6 +70,17 @@ function validateCustomToken(token) {
   return token;
 }
 
+function validateLabel(label) {
+  if (!label) return null;
+  // Limit length to prevent storage exhaustion and log injection
+  if (label.length > 100) {
+    throw new Error('Label must be 100 characters or less');
+  }
+  // Sanitize: remove control characters and normalize whitespace
+  // eslint-disable-next-line no-control-regex
+  return label.replace(/[\x00-\x1f\x7f]/g, '').trim();
+}
+
 // =============================================================================
 // Commands
 // =============================================================================
@@ -77,6 +88,9 @@ function validateCustomToken(token) {
 async function generate(options) {
   // Use custom token if provided, otherwise generate random one
   const token = options.token ? validateCustomToken(options.token) : generateToken();
+
+  // Validate and sanitize label
+  const label = validateLabel(options.label);
 
   // Check if token already exists
   const existing = await redis.get(`invite:${token}`);
@@ -96,7 +110,7 @@ async function generate(options) {
     status: 'pending',
     maxUses: 1,
     useCount: 0,
-    label: options.label || null,
+    label: label,
     createdBy: 'cli',
     sessions: []
   };
