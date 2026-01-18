@@ -54,6 +54,12 @@ const CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN || '';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'change-me-in-production';
 
+// Validate SESSION_SECRET in production
+if (SESSION_SECRET === 'change-me-in-production' && process.env.NODE_ENV === 'production') {
+  console.error('FATAL: SESSION_SECRET must be set in production');
+  process.exit(1);
+}
+
 // =============================================================================
 // OpenTelemetry Metrics Setup
 // =============================================================================
@@ -129,6 +135,7 @@ let activeSession = null;  // { clientId, sessionId, startedAt, expiresAt, ttydP
 const sessionTokens = new Map(); // sessionToken -> sessionId (for Grafana auth)
 const pendingSessionTokens = new Map(); // sessionToken -> { clientId, inviteToken, ip } (for queue/pending state)
 let disconnectGraceTimeout = null; // Timeout for disconnect grace period
+let reconnectionInProgress = false; // Prevent concurrent reconnection attempts
 const DISCONNECT_GRACE_MS = 10000; // 10 seconds grace period for page refresh
 
 // Invite audit retention (30 days after expiration)
@@ -213,6 +220,15 @@ app.get('/api/invite/validate', async (req, res) => {
 
 // Scenarios endpoint - renders markdown as styled HTML
 const SCENARIOS_PATH = '/opt/demo-container/scenarios';
+
+// HTML escape helper to prevent XSS
+const escapeHtml = (str) => str
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
+
 const SCENARIO_NAMES = {
   'page': { file: 'page.md', title: 'Page Management', icon: '📝' },
   'search': { file: 'search.md', title: 'CQL Search', icon: '🔍' },
@@ -246,10 +262,10 @@ app.get('/api/scenarios/:name', (req, res) => {
 
     const htmlContent = marked(markdown);
 
-    // Render template with substitutions
+    // Render template with substitutions (escape icon/title to prevent XSS)
     const html = scenarioTemplate
-      .replace(/\{\{ICON\}\}/g, scenario.icon)
-      .replace(/\{\{TITLE\}\}/g, scenario.title)
+      .replace(/\{\{ICON\}\}/g, escapeHtml(scenario.icon))
+      .replace(/\{\{TITLE\}\}/g, escapeHtml(scenario.title))
       .replace(/\{\{CONTENT\}\}/g, htmlContent);
 
     res.setHeader('Content-Type', 'text/html');
@@ -372,38 +388,50 @@ async function joinQueue(ws, client, inviteToken) {
   // Check if this is a reconnection to an active session (grace period)
   if (activeSession && activeSession.awaitingReconnect &&
       activeSession.inviteToken === inviteToken && activeSession.ip === client.ip) {
-    console.log(`Client ${client.id} reconnecting to session ${activeSession.sessionId} during grace period`);
 
-    // Cancel the grace period timeout
-    if (disconnectGraceTimeout) {
-      clearTimeout(disconnectGraceTimeout);
-      disconnectGraceTimeout = null;
+    // Prevent concurrent reconnection attempts
+    if (reconnectionInProgress) {
+      sendError(ws, 'Reconnection already in progress');
+      return;
     }
 
-    // Update session with new client
-    activeSession.clientId = client.id;
-    activeSession.awaitingReconnect = false;
-    delete activeSession.disconnectedAt;
+    reconnectionInProgress = true;
+    try {
+      console.log(`Client ${client.id} reconnecting to session ${activeSession.sessionId} during grace period`);
 
-    // Give client the existing session token
-    client.inviteToken = inviteToken;
-    client.state = 'active';
-    client.pendingSessionToken = activeSession.sessionToken;
+      // Cancel the grace period timeout
+      if (disconnectGraceTimeout) {
+        clearTimeout(disconnectGraceTimeout);
+        disconnectGraceTimeout = null;
+      }
 
-    // Send session info to client
-    ws.send(JSON.stringify({
-      type: 'session_token',
-      session_token: activeSession.sessionToken
-    }));
-    ws.send(JSON.stringify({
-      type: 'session_starting',
-      terminal_url: '/terminal',
-      expires_at: activeSession.expiresAt.toISOString(),
-      session_token: activeSession.sessionToken,
-      reconnected: true
-    }));
+      // Update session with new client
+      activeSession.clientId = client.id;
+      activeSession.awaitingReconnect = false;
+      delete activeSession.disconnectedAt;
 
-    console.log(`Session ${activeSession.sessionId} reconnected successfully`);
+      // Give client the existing session token
+      client.inviteToken = inviteToken;
+      client.state = 'active';
+      client.pendingSessionToken = activeSession.sessionToken;
+
+      // Send session info to client
+      ws.send(JSON.stringify({
+        type: 'session_token',
+        session_token: activeSession.sessionToken
+      }));
+      ws.send(JSON.stringify({
+        type: 'session_starting',
+        terminal_url: '/terminal',
+        expires_at: activeSession.expiresAt.toISOString(),
+        session_token: activeSession.sessionToken,
+        reconnected: true
+      }));
+
+      console.log(`Session ${activeSession.sessionId} reconnected successfully`);
+    } finally {
+      reconnectionInProgress = false;
+    }
     return;
   }
 

@@ -51,8 +51,7 @@ services:
     depends_on:
       queue-manager:
         condition: service_healthy
-      lgtm:
-        condition: service_healthy
+      # Note: lgtm dependency is inherited via queue-manager -> lgtm chain
     restart: unless-stopped
     networks:
       - demo-network

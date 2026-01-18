@@ -82,7 +82,7 @@ def retry_on_failure(max_retries: int = DEFAULT_MAX_RETRIES, base_delay: float =
             # Should not reach here, but just in case
             if last_exception:
                 raise last_exception
-            return response
+            raise RuntimeError("Retry loop completed without result")
 
         return wrapper
     return decorator
