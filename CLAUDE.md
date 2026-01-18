@@ -10,15 +10,24 @@ This is a production demo platform for **Confluence Assistant Skills** - a Claud
 
 ```
 confluence-demo/
-├── docker-compose.yml          # Production orchestration
+├── docker-compose.yml          # Production orchestration (YAML anchors for DRY config)
 ├── docker-compose.dev.yml      # Development overrides
-├── Makefile                    # 50+ dev/deploy/test targets
+├── Makefile                    # 50+ dev/deploy/test targets (macros for reuse)
 ├── queue-manager/              # Node.js WebSocket server
+│   ├── server.js               # Main server with session management
+│   ├── templates/              # HTML templates (scenario.html)
+│   └── static/                 # CSS files (scenario.css)
 ├── demo-container/             # Claude + Confluence plugin container
 ├── landing-page/               # Static HTML frontend
+│   ├── index.html              # Main page
+│   ├── styles.css              # Shared styles (includes error page styles)
+│   └── unauthorized.html       # Error page (uses shared styles)
 ├── nginx/                      # Reverse proxy configuration
 ├── observability/              # LGTM stack (Grafana, Loki, Tempo)
 ├── scripts/                    # Python maintenance scripts
+│   ├── confluence_base.py      # Shared API client with retry logic
+│   ├── seed_demo_data.py       # Creates demo content
+│   └── cleanup_demo_sandbox.py # Resets sandbox
 └── secrets/                    # Credentials (.gitignored)
 ```
 
@@ -62,6 +71,32 @@ make test-skill-dev SCENARIO=page PROMPT_INDEX=0
 # Run all mock tests in parallel
 make test-all-mocks
 ```
+
+### Code Quality
+
+```bash
+# Run all linters
+make lint
+
+# JavaScript only (ESLint)
+make lint-js
+
+# Python only (Ruff)
+make lint-py
+
+# Auto-fix issues
+make lint-fix
+```
+
+### Code Review
+
+Use the `feature-dev:code-reviewer` subagent for security and quality review:
+
+```
+Run a code-reviewer subagent on project
+```
+
+This identifies security vulnerabilities, logic errors, and code quality issues.
 
 ### Sandbox Management
 
@@ -208,7 +243,84 @@ The `cleanup_demo_sandbox.py` script:
 - Preserves seed data
 - Clears comments from demo pages
 
+## Security Considerations
+
+### Session Management
+
+- `SESSION_SECRET` must be set in production (server exits if default value detected with `NODE_ENV=production`)
+- Session tokens use HMAC-SHA256 signatures
+- Reconnection logic has race condition protection via `reconnectionInProgress` lock
+
+### Input Validation
+
+- Invite tokens validated via regex: `[A-Za-z0-9_-]{4,64}`
+- HTML template substitution uses `escapeHtml()` to prevent XSS
+- Scenario names validated against whitelist (`SCENARIO_NAMES` object)
+
+### API Client
+
+The `scripts/confluence_base.py` module provides:
+
+- Automatic retry with exponential backoff (1s, 2s, 4s)
+- Rate limit handling (429) with Retry-After header support
+- Transient error handling (500, 502, 503, 504)
+- Connection timeout (30s)
+
+## Coding Patterns
+
+### DRY Configuration
+
+**Docker Compose YAML anchors:**
+```yaml
+x-logging-standard: &logging-standard
+  driver: json-file
+  options:
+    max-size: "10m"
+
+services:
+  nginx:
+    logging: *logging-standard
+```
+
+**Makefile macros:**
+```makefile
+define skill_test_run
+  docker run --rm $(1) ...
+endef
+
+test-skill:
+  $(call skill_test_run,$(CONFLUENCE_ENV_VARS),)
+```
+
+### Template Extraction
+
+HTML templates in `queue-manager/templates/` use placeholder substitution:
+```html
+<title>{{ICON}} {{TITLE}}</title>
+```
+
+Always escape dynamic values:
+```javascript
+const escapeHtml = (str) => str
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;');
+```
+
+### Shared Modules
+
+Python scripts use `scripts/confluence_base.py`:
+```python
+from confluence_base import ConfluenceClient, require_config
+
+config = require_config()
+client = ConfluenceClient(config)
+response = client.get("/wiki/api/v2/spaces")
+```
+
 ## Testing Strategy
+
+**Important:** Tests require the dev environment running (`make dev`) or at minimum the `demo-telemetry-network` Docker network.
 
 ### Unit Tests (Mock API)
 
@@ -303,6 +415,15 @@ make health
 | splunk-demo | [GitHub](https://github.com/grandcamel/splunk-demo) | Similar demo for Splunk |
 
 ## Common Tasks
+
+### Before Committing
+
+Always run linters before committing:
+```bash
+make lint
+```
+
+For refactoring work, use the code-reviewer subagent to catch security issues.
 
 ### Adding a New Scenario
 
