@@ -393,5 +393,9 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Related Projects
 
-- [Confluence Assistant Skills](https://github.com/grandcamel/confluence-assistant-skills) - The Claude Code plugin
-- [claude-devcontainer](https://github.com/grandcamel/claude-devcontainer) - Base container image
+| Project | Purpose |
+|---------|---------|
+| [Confluence Assistant Skills](https://github.com/grandcamel/confluence-assistant-skills) | Claude Code plugin |
+| [claude-devcontainer](https://github.com/grandcamel/claude-devcontainer) | Base container image |
+| [jira-demo](https://github.com/grandcamel/jira-demo) | Similar demo for JIRA |
+| [splunk-demo](https://github.com/grandcamel/splunk-demo) | Similar demo for Splunk |
