@@ -300,6 +300,7 @@ make health
 | Confluence-Assistant-Skills | [GitHub](https://github.com/jasonkrueger/Confluence-Assistant-Skills) / [PyPI](https://pypi.org/project/confluence-assistant-skills-plugin/) | Source plugin |
 | confluence-assistant-skills-lib | [PyPI](https://pypi.org/project/confluence-assistant-skills-lib/) | Shared library |
 | jira-demo | [GitHub](https://github.com/jasonkrueger/jira-demo) | Reference implementation |
+| splunk-demo | [GitHub](https://github.com/grandcamel/splunk-demo) | Similar demo for Splunk |
 
 ## Common Tasks
 
