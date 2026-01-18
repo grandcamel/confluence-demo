@@ -5,24 +5,45 @@
 	logs-errors-local traces-errors-local help \
 	lint lint-js lint-py lint-fix lint-fix-js lint-fix-py
 
-# Docker network for telemetry (external network shared with compose)
-DEMO_NETWORK ?= demo-telemetry-network
+# =============================================================================
+# Configuration
+# =============================================================================
 
-# Load environment variables
+# Load environment from secrets/.env (contains CONFLUENCE_* and other secrets)
 ifneq (,$(wildcard ./secrets/.env))
     include ./secrets/.env
     export
 endif
 
 # macOS Keychain fallback for CLAUDE_CODE_OAUTH_TOKEN
-# If not set in env and running on macOS, try to retrieve from Keychain
 ifeq ($(shell uname -s),Darwin)
     ifndef CLAUDE_CODE_OAUTH_TOKEN
         CLAUDE_CODE_OAUTH_TOKEN := $(shell security find-generic-password -a "$$USER" -s "CLAUDE_CODE_OAUTH_TOKEN" -w 2>/dev/null)
     endif
 endif
-# Export for docker-compose to use
 export CLAUDE_CODE_OAUTH_TOKEN
+
+# -----------------------------------------------------------------------------
+# Docker Configuration
+# -----------------------------------------------------------------------------
+DEMO_NETWORK ?= demo-telemetry-network
+BASE_IMAGE ?= grandcamel/claude-devcontainer:enhanced
+
+# -----------------------------------------------------------------------------
+# Local Development Paths (override these for your environment)
+# -----------------------------------------------------------------------------
+CONFLUENCE_SKILLS_PATH ?= $(HOME)/IdeaProjects/Confluence-Assistant-Skills
+CONFLUENCE_PLUGIN_PATH = $(CONFLUENCE_SKILLS_PATH)/.claude-plugin
+CONFLUENCE_LIB_PATH = $(CONFLUENCE_SKILLS_PATH)/confluence-assistant-skills-lib
+CONFLUENCE_DIST_PATH = $(CONFLUENCE_SKILLS_PATH)/confluence-assistant-skills-lib/dist
+
+# -----------------------------------------------------------------------------
+# Test Configuration
+# -----------------------------------------------------------------------------
+CLAUDE_SESSIONS_DIR ?= /tmp/claude-sessions
+CHECKPOINTS_DIR ?= /tmp/checkpoints
+MODEL ?= sonnet
+JUDGE_MODEL ?= haiku
 
 # Development
 dev:
@@ -34,8 +55,6 @@ dev-down:
 	docker-compose -f docker-compose.yml -f docker-compose.dev.yml down
 
 # Build
-# Override base image: make build BASE_IMAGE=your-registry/claude-devcontainer:enhanced
-BASE_IMAGE ?= grandcamel/claude-devcontainer:enhanced
 build:
 	@echo "Building all containers..."
 	docker-compose build
@@ -291,21 +310,13 @@ test-skill:
 	$(call skill_test_run,$(CONFLUENCE_ENV_VARS),)
 
 # Fast skill testing with local source mounts (no rebuild needed)
-# CONFLUENCE_SKILLS_PATH: Path to Confluence-Assistant-Skills repo root
+# Requires CONFLUENCE_SKILLS_PATH to point to your local Confluence-Assistant-Skills repo
 # Usage: make test-skill-dev SCENARIO=search
 #        make test-skill-dev SCENARIO=search PROMPT_INDEX=0  # Single prompt for fast iteration
 #        make test-skill-dev SCENARIO=search FIX_CONTEXT=1   # Output fix context JSON
 #        make test-skill-dev SCENARIO=search CONVERSATION=1  # Multi-prompt conversation mode
 #        make test-skill-dev SCENARIO=search CONVERSATION=1 FAIL_FAST=1  # Stop on first failure
 #        make test-skill-dev SCENARIO=search FORK_FROM=0     # Fork from checkpoint after prompt 0
-CONFLUENCE_SKILLS_PATH ?= /Users/jasonkrueger/IdeaProjects/Confluence-Assistant-Skills
-CONFLUENCE_PLUGIN_PATH = $(CONFLUENCE_SKILLS_PATH)/.claude-plugin
-CONFLUENCE_LIB_PATH = $(CONFLUENCE_SKILLS_PATH)/confluence-assistant-skills-lib
-# Use consolidated wheel from lib dist (contains both library and CLI)
-CONFLUENCE_DIST_PATH = $(CONFLUENCE_SKILLS_PATH)/confluence-assistant-skills-lib/dist
-# Session persistence directories for fork feature
-CLAUDE_SESSIONS_DIR ?= /tmp/claude-sessions
-CHECKPOINTS_DIR ?= /tmp/checkpoints
 test-skill-dev:
 	@if [ -z "$(SCENARIO)" ]; then echo "Usage: make test-skill-dev SCENARIO=<name> [PROMPT_INDEX=N] [FIX_CONTEXT=1]"; exit 1; fi
 	@if [ ! -d "$(CONFLUENCE_PLUGIN_PATH)" ]; then echo "Error: Plugin not found at $(CONFLUENCE_PLUGIN_PATH)"; exit 1; fi
