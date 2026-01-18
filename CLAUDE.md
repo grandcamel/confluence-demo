@@ -183,6 +183,15 @@ SEED_DEMO_DATA=true
 # Claude Authentication (one required)
 CLAUDE_CODE_OAUTH_TOKEN=...  # or
 ANTHROPIC_API_KEY=...
+
+# Security (required in production)
+SESSION_SECRET=your-secure-random-string
+
+# Security (optional)
+BASE_URL=https://demo.example.com        # Base URL for origin validation (default: http://localhost:8080)
+ALLOWED_ORIGINS=https://demo.example.com # Comma-separated allowed WebSocket origins (default: BASE_URL)
+COOKIE_SECURE=true                       # Force secure cookies (auto-enabled in production)
+SESSION_ENV_HOST_PATH=/path/to/session-env  # Host path for session env files
 ```
 
 ### Secure Token Storage
@@ -248,14 +257,58 @@ The `cleanup_demo_sandbox.py` script:
 ### Session Management
 
 - `SESSION_SECRET` must be set in production (server exits if default value detected with `NODE_ENV=production`)
+- Development mode warns when using default `SESSION_SECRET`
 - Session tokens use HMAC-SHA256 signatures
+- Secure cookies with `httpOnly`, `secure` (production), and `sameSite=strict`
 - Reconnection logic has race condition protection via `reconnectionInProgress` lock
+- TTY process hard timeout (session timeout + 5 min) as safety net
+
+### Rate Limiting
+
+- **WebSocket connections**: 10 connections per IP per minute
+- **Invite validation**: 10 failed attempts per IP per hour (brute-force protection)
+- Automatic cleanup of stale rate limit entries every 5 minutes
 
 ### Input Validation
 
 - Invite tokens validated via regex: `[A-Za-z0-9_-]{4,64}`
+- Invite labels limited to 100 characters, control characters stripped
 - HTML template substitution uses `escapeHtml()` to prevent XSS
+- Markdown output sanitized via DOMPurify (whitelist of safe tags/attributes)
 - Scenario names validated against whitelist (`SCENARIO_NAMES` object)
+- Path traversal protection validates resolved paths stay within `SCENARIOS_PATH`
+- Content-Type validation rejects non-JSON POST/PUT/PATCH requests
+
+### HTTP Security Headers
+
+Helmet.js provides security headers including:
+- Content-Security-Policy (CSP)
+- X-Frame-Options
+- X-Content-Type-Options
+- Strict-Transport-Security (HSTS)
+
+### WebSocket Security
+
+- Origin validation against `ALLOWED_ORIGINS` whitelist
+- Rate limiting per IP address
+- Connections from non-allowed origins are rejected
+
+### Container Security
+
+Spawned demo containers have security constraints:
+- **Memory limit**: 2GB (no swap)
+- **CPU limit**: 2 cores
+- **PID limit**: 256 (prevents fork bombs)
+- **Capabilities**: All dropped except CHOWN, SETUID, SETGID, DAC_OVERRIDE
+- **no-new-privileges**: Prevents privilege escalation
+- **Read-only root filesystem**: With tmpfs for `/tmp` and `/home/demo`
+
+### Credential Protection
+
+- Sensitive credentials passed via `--env-file` (not visible in `ps aux` or `docker inspect`)
+- Session env files created with 0600 permissions
+- Env files cleaned up on session end
+- Docker socket access documented with security mitigations in `docker-compose.yml`
 
 ### API Client
 
