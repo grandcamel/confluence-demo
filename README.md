@@ -324,6 +324,54 @@ make otel-reset  # Reset observability data (fresh start)
 | `confluence_demo_session_duration_seconds` | Session duration histogram |
 | `confluence_demo_invites_validated_total` | Invite validation by status |
 
+## Troubleshooting
+
+### Plugin Installation Fails
+
+If the demo container shows "⚠ Plugin installation failed":
+
+```bash
+# Claude Code rejects unrecognized keys in plugin.json
+# Verify the plugin has no custom keys like "assistant_skills"
+
+# Marketplace installation uses: plugin@marketplace-name format
+claude plugin install confluence-assistant-skills@confluence-assistant-skills-marketplace --scope user
+
+# Plugin cache path includes .claude-plugin/ directory
+ls ~/.claude/plugins/cache/*/confluence-assistant-skills/*/.claude-plugin/plugin.json
+```
+
+### CLI Installation Fails
+
+If the demo container shows "⚠ CLI installation failed":
+
+```bash
+# Verify the PyPI package exists
+curl -s https://pypi.org/pypi/confluence-assistant-skills/json | jq .info.version
+
+# The CLI is published as "confluence-assistant-skills" (not the lib package)
+pip install confluence-assistant-skills
+confluence --version
+```
+
+### Autoplay Scenarios Not Working
+
+Scenario prompts use YAML format with document separators:
+
+```yaml
+---
+prompt: |
+  Your multi-line prompt here
+expect:
+  tools:
+    must_call: [Skill]
+---
+```
+
+### Browser Automation Limitations
+
+Playwright cannot send keyboard input to ttyd terminal iframes (xterm.js captures all keyboard events). Use `make test-skill-dev` for automated testing instead.
+
 ## Monitoring
 
 - **Uptime**: UptimeRobot monitoring https://demo.confluence-skills.dev/health
