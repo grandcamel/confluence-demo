@@ -13,6 +13,19 @@ x-logging-small: &logging-small
     max-size: "5m"
     max-file: "2"
 
+# Shared health check configurations
+x-healthcheck-http: &healthcheck-http
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 10s
+
+x-healthcheck-fast: &healthcheck-fast
+  interval: 10s
+  timeout: 5s
+  retries: 3
+  start_period: 5s
+
 services:
   nginx:
     image: nginx:alpine
@@ -32,9 +45,14 @@ services:
       sh -c "rm -f /var/log/nginx/access.log /var/log/nginx/error.log &&
              touch /var/log/nginx/access.log /var/log/nginx/error.log &&
              nginx -g 'daemon off;'"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      <<: *healthcheck-http
     depends_on:
-      - queue-manager
-      - lgtm
+      queue-manager:
+        condition: service_healthy
+      lgtm:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - demo-network
@@ -62,9 +80,14 @@ services:
       - ./secrets:/secrets:ro
       - ./demo-container:/opt/demo-container:ro
       - ./scripts:/opt/scripts:ro
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
+      <<: *healthcheck-http
     depends_on:
-      - redis
-      - lgtm
+      redis:
+        condition: service_healthy
+      lgtm:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - demo-network
@@ -75,6 +98,9 @@ services:
     container_name: confluence-demo-redis
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      <<: *healthcheck-fast
     restart: unless-stopped
     networks:
       - demo-network
@@ -100,6 +126,10 @@ services:
       - ./observability/grafana-dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/confluence-demo.yaml:ro
       - ./observability/dashboards:/var/lib/grafana/dashboards:ro
       - lgtm-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      <<: *healthcheck-http
+      start_period: 30s
     restart: unless-stopped
     networks:
       - demo-network
@@ -110,8 +140,12 @@ services:
     container_name: confluence-demo-redis-exporter
     environment:
       - REDIS_ADDR=redis://redis:6379
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9121/metrics"]
+      <<: *healthcheck-fast
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - demo-network
@@ -124,8 +158,12 @@ services:
       - ./observability/promtail-config.yaml:/etc/promtail/config.yml:ro
       - nginx-logs:/var/log/nginx:ro
     command: -config.file=/etc/promtail/config.yml
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9080/ready"]
+      <<: *healthcheck-fast
     depends_on:
-      - lgtm
+      lgtm:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - demo-network
