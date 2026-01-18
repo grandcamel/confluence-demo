@@ -32,6 +32,7 @@ const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
 const { marked } = require('marked');
+const DOMPurify = require('isomorphic-dompurify');
 
 // OpenTelemetry imports (only if available)
 let metrics, trace;
@@ -63,10 +64,14 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || BASE_URL).split(',').map
 // Cookie security settings
 const COOKIE_SECURE = process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true';
 
-// Validate SESSION_SECRET in production
-if (SESSION_SECRET === 'change-me-in-production' && process.env.NODE_ENV === 'production') {
-  console.error('FATAL: SESSION_SECRET must be set in production');
-  process.exit(1);
+// Validate SESSION_SECRET
+if (SESSION_SECRET === 'change-me-in-production') {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('FATAL: SESSION_SECRET must be set in production');
+    process.exit(1);
+  } else {
+    console.warn('WARNING: Using default SESSION_SECRET. Set SESSION_SECRET env var for secure sessions.');
+  }
 }
 
 // =============================================================================
@@ -155,6 +160,11 @@ const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute window
 const RATE_LIMIT_MAX_CONNECTIONS = 10;   // Max connections per IP per window
 const connectionRateLimits = new Map();  // ip -> { count, resetAt }
 
+// Invite validation rate limiting (brute-force protection)
+const INVITE_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;  // 1 hour window
+const INVITE_RATE_LIMIT_MAX_ATTEMPTS = 10;           // Max failed attempts per IP per hour
+const inviteRateLimits = new Map();                  // ip -> { count, resetAt }
+
 // Load HTML template at startup (cached)
 const scenarioTemplate = fs.readFileSync(path.join(__dirname, 'templates', 'scenario.html'), 'utf8');
 
@@ -164,6 +174,20 @@ const scenarioTemplate = fs.readFileSync(path.join(__dirname, 'templates', 'scen
 
 app.use(express.json());
 app.use(cookieParser());
+
+// Content-Type validation for POST/PUT/PATCH requests
+app.use((req, res, next) => {
+  const methodsRequiringBody = ['POST', 'PUT', 'PATCH'];
+  if (methodsRequiringBody.includes(req.method)) {
+    const contentType = req.headers['content-type'];
+    // Allow requests with no body (content-length: 0) or proper JSON content-type
+    const hasBody = req.headers['content-length'] && req.headers['content-length'] !== '0';
+    if (hasBody && (!contentType || !contentType.includes('application/json'))) {
+      return res.status(415).json({ error: 'Content-Type must be application/json' });
+    }
+  }
+  next();
+});
 
 // Security headers via Helmet
 app.use(helmet({
@@ -275,7 +299,19 @@ app.get('/api/invite/validate', async (req, res) => {
   const token = req.headers['x-invite-token'] || req.query.token;
   const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress;
 
+  // Check rate limit before validating (brute-force protection)
+  const rateLimit = checkInviteRateLimit(clientIp);
+  if (!rateLimit.allowed) {
+    console.log(`Invite validation rate limit exceeded for ${clientIp}`);
+    return res.status(429).json({
+      valid: false,
+      reason: 'rate_limited',
+      message: `Too many attempts. Please try again in ${Math.ceil(rateLimit.retryAfter / 60)} minutes.`
+    });
+  }
+
   if (!token) {
+    recordFailedInviteAttempt(clientIp);
     return res.status(401).json({ valid: false, reason: 'missing', message: 'Invite token required' });
   }
 
@@ -284,6 +320,8 @@ app.get('/api/invite/validate', async (req, res) => {
   if (validation.valid) {
     res.status(200).json({ valid: true });
   } else {
+    // Record failed attempt for rate limiting
+    recordFailedInviteAttempt(clientIp);
     res.status(401).json({ valid: false, reason: validation.reason, message: validation.message });
   }
 });
@@ -338,7 +376,16 @@ app.get('/api/scenarios/:name', (req, res) => {
       return res.status(404).json({ error: 'Scenario file not found' });
     }
 
-    const htmlContent = marked(markdown);
+    // Convert markdown to HTML and sanitize to prevent XSS
+    const rawHtml = marked(markdown);
+    const htmlContent = DOMPurify.sanitize(rawHtml, {
+      ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'hr',
+                     'ul', 'ol', 'li', 'a', 'strong', 'em', 'code', 'pre',
+                     'blockquote', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+                     'img', 'span', 'div'],
+      ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'target', 'rel'],
+      ALLOW_DATA_ATTR: false
+    });
 
     // Render template with substitutions (escape icon/title to prevent XSS)
     const html = scenarioTemplate
@@ -380,12 +427,52 @@ function checkRateLimit(ip) {
   return { allowed: true };
 }
 
+// Check invite validation rate limit (brute-force protection)
+function checkInviteRateLimit(ip) {
+  const now = Date.now();
+  const record = inviteRateLimits.get(ip);
+
+  // Clean up expired entry
+  if (record && now > record.resetAt) {
+    inviteRateLimits.delete(ip);
+  }
+
+  const current = inviteRateLimits.get(ip);
+  if (!current) {
+    return { allowed: true };
+  }
+
+  if (current.count >= INVITE_RATE_LIMIT_MAX_ATTEMPTS) {
+    const retryAfter = Math.ceil((current.resetAt - now) / 1000);
+    return { allowed: false, retryAfter };
+  }
+
+  return { allowed: true };
+}
+
+// Record failed invite validation attempt
+function recordFailedInviteAttempt(ip) {
+  const now = Date.now();
+  const current = inviteRateLimits.get(ip);
+
+  if (!current || now > current.resetAt) {
+    inviteRateLimits.set(ip, { count: 1, resetAt: now + INVITE_RATE_LIMIT_WINDOW_MS });
+  } else {
+    current.count++;
+  }
+}
+
 // Periodic cleanup of stale rate limit entries (every 5 minutes)
 setInterval(() => {
   const now = Date.now();
   for (const [ip, record] of connectionRateLimits.entries()) {
     if (now > record.resetAt) {
       connectionRateLimits.delete(ip);
+    }
+  }
+  for (const [ip, record] of inviteRateLimits.entries()) {
+    if (now > record.resetAt) {
+      inviteRateLimits.delete(ip);
     }
   }
 }, 5 * 60 * 1000);
@@ -944,10 +1031,32 @@ async function startSession(ws, client) {
     // Handle ttyd exit
     ttydProcess.on('exit', (code) => {
       console.log(`ttyd exited with code ${code}`);
+      // Clear hard timeout since process exited normally
+      if (activeSession && activeSession.hardTimeout) {
+        clearTimeout(activeSession.hardTimeout);
+        activeSession.hardTimeout = null;
+      }
       if (activeSession && activeSession.clientId === client.id) {
         endSession('container_exit');
       }
     });
+
+    // Hard timeout: force-kill ttyd if still running after session timeout + 5 min grace
+    // This is a safety net in case the normal session timeout fails
+    const hardTimeoutMs = (SESSION_TIMEOUT_MINUTES + 5) * 60 * 1000;
+    const hardTimeout = setTimeout(() => {
+      if (activeSession && activeSession.ttydProcess && activeSession.clientId === client.id) {
+        console.log(`Hard timeout reached for session ${sessionId}, force-killing ttyd`);
+        try {
+          activeSession.ttydProcess.kill('SIGKILL');
+        } catch (err) {
+          console.error('Error force-killing ttyd:', err.message);
+        }
+      }
+    }, hardTimeoutMs);
+
+    // Store timeout reference for cleanup
+    activeSession.hardTimeout = hardTimeout;
 
     // Notify client
     ws.send(JSON.stringify({
@@ -1048,6 +1157,12 @@ async function endSession(reason) {
     } catch (err) {
       console.error('Error killing ttyd:', err.message);
     }
+  }
+
+  // Clear hard timeout
+  if (activeSession.hardTimeout) {
+    clearTimeout(activeSession.hardTimeout);
+    activeSession.hardTimeout = null;
   }
 
   // Clean up session env file (contains sensitive credentials)
