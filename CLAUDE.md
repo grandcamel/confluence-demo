@@ -386,6 +386,58 @@ docker compose ps redis
 docker compose exec redis redis-cli ping
 ```
 
+**Plugin installation fails ("⚠ Plugin installation failed"):**
+```bash
+# Check plugin.json has no unrecognized keys
+# Claude Code rejects any keys not in the schema (e.g., "assistant_skills" is invalid)
+
+# Verify marketplace name matches what's in marketplace.json
+# Format: claude plugin install <plugin>@<marketplace-name>
+# Example: claude plugin install confluence-assistant-skills@confluence-assistant-skills-marketplace
+
+# Check plugin cache path (includes .claude-plugin/ directory)
+ls ~/.claude/plugins/cache/*/confluence-assistant-skills/*/.claude-plugin/plugin.json
+
+# Clear plugin cache and reinstall
+rm -rf ~/.claude/plugins
+claude plugin marketplace add https://github.com/grandcamel/confluence-assistant-skills.git#main
+claude plugin install confluence-assistant-skills@confluence-assistant-skills-marketplace --scope user
+```
+
+**CLI installation fails ("⚠ CLI installation failed"):**
+```bash
+# Verify PyPI package name matches what entrypoint.sh expects
+pip search confluence-assistant-skills  # Note: search may be disabled
+
+# Check package exists on PyPI
+curl -s https://pypi.org/pypi/confluence-assistant-skills/json | jq .info.version
+
+# Manual install for debugging
+pip install confluence-assistant-skills -v
+```
+
+**Autoplay scenario errors ("No prompts found"):**
+```bash
+# Prompts files use YAML format with document separators
+# Correct format:
+# ---
+# prompt: |
+#   Your multi-line prompt here
+# expect:
+#   tools:
+#     must_call: [Skill]
+# ---
+
+# Test parser output
+grep -c "^prompt:" demo-container/scenarios/page.prompts
+```
+
+**Browser testing limitations:**
+- Playwright cannot send keyboard input to ttyd terminal iframes
+- The terminal uses xterm.js which captures all keyboard events
+- Workaround: Test scenarios via `make test-skill-dev` instead of browser automation
+- For visual verification, use `make test-skill-dev` with `FIX_CONTEXT=1`
+
 ### Debug Mode
 
 Enable verbose logging:
