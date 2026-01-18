@@ -53,6 +53,9 @@ const TTYD_PORT = 7681;
 const CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN || '';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'change-me-in-production';
+// Host path for session env files (for --env-file in spawned containers)
+const SESSION_ENV_HOST_PATH = process.env.SESSION_ENV_HOST_PATH || '/tmp/session-env';
+const SESSION_ENV_CONTAINER_PATH = '/run/session-env';
 
 // Validate SESSION_SECRET in production
 if (SESSION_SECRET === 'change-me-in-production' && process.env.NODE_ENV === 'production') {
@@ -140,6 +143,11 @@ const DISCONNECT_GRACE_MS = 10000; // 10 seconds grace period for page refresh
 
 // Invite audit retention (30 days after expiration)
 const AUDIT_RETENTION_DAYS = 30;
+
+// Rate limiting configuration
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute window
+const RATE_LIMIT_MAX_CONNECTIONS = 10;   // Max connections per IP per window
+const connectionRateLimits = new Map();  // ip -> { count, resetAt }
 
 // Load HTML template at startup (cached)
 const scenarioTemplate = fs.readFileSync(path.join(__dirname, 'templates', 'scenario.html'), 'utf8');
@@ -274,6 +282,45 @@ app.get('/api/scenarios/:name', (req, res) => {
 });
 
 // =============================================================================
+// Rate Limiting
+// =============================================================================
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const record = connectionRateLimits.get(ip);
+
+  // Clean up expired entry
+  if (record && now > record.resetAt) {
+    connectionRateLimits.delete(ip);
+  }
+
+  const current = connectionRateLimits.get(ip);
+  if (!current) {
+    // First connection from this IP
+    connectionRateLimits.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true };
+  }
+
+  if (current.count >= RATE_LIMIT_MAX_CONNECTIONS) {
+    const retryAfter = Math.ceil((current.resetAt - now) / 1000);
+    return { allowed: false, retryAfter };
+  }
+
+  current.count++;
+  return { allowed: true };
+}
+
+// Periodic cleanup of stale rate limit entries (every 5 minutes)
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of connectionRateLimits.entries()) {
+    if (now > record.resetAt) {
+      connectionRateLimits.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000);
+
+// =============================================================================
 // WebSocket Handlers
 // =============================================================================
 
@@ -281,6 +328,14 @@ wss.on('connection', (ws, req) => {
   const clientId = uuidv4();
   const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress;
   const userAgent = req.headers['user-agent'] || 'unknown';
+
+  // Check rate limit before accepting connection
+  const rateLimit = checkRateLimit(clientIp);
+  if (!rateLimit.allowed) {
+    console.log(`Rate limit exceeded for ${clientIp}, rejecting connection`);
+    ws.close(1008, `Rate limit exceeded. Retry after ${rateLimit.retryAfter} seconds.`);
+    return;
+  }
 
   clients.set(ws, {
     id: clientId,
@@ -651,6 +706,57 @@ function broadcastQueueUpdate() {
 }
 
 // =============================================================================
+// Session Environment File Management
+// =============================================================================
+
+/**
+ * Creates a session-specific env file with sensitive credentials.
+ * Using --env-file instead of -e flags prevents secrets from appearing in ps/docker inspect.
+ * @param {string} sessionId - Unique session identifier
+ * @returns {Object} - { containerPath, hostPath, cleanup } for the env file
+ */
+function createSessionEnvFile(sessionId) {
+  const filename = `session-${sessionId}.env`;
+  const containerPath = path.join(SESSION_ENV_CONTAINER_PATH, filename);
+  const hostPath = path.join(SESSION_ENV_HOST_PATH, filename);
+
+  // Build env file content (only sensitive values)
+  const envContent = [
+    `CONFLUENCE_API_TOKEN=${process.env.CONFLUENCE_API_TOKEN || ''}`,
+    `CONFLUENCE_EMAIL=${process.env.CONFLUENCE_EMAIL || ''}`,
+    `CONFLUENCE_SITE_URL=${process.env.CONFLUENCE_SITE_URL || ''}`,
+    ...(CLAUDE_CODE_OAUTH_TOKEN ? [`CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}`] : []),
+    ...(ANTHROPIC_API_KEY ? [`ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}`] : []),
+  ].join('\n') + '\n';
+
+  // Write to container path (which maps to host path via volume mount)
+  try {
+    // Ensure directory exists
+    fs.mkdirSync(SESSION_ENV_CONTAINER_PATH, { recursive: true });
+    fs.writeFileSync(containerPath, envContent, { mode: 0o600 });
+    console.log(`Created session env file: ${containerPath}`);
+  } catch (err) {
+    console.error(`Failed to create session env file: ${err.message}`);
+    throw err;
+  }
+
+  // Return cleanup function
+  const cleanup = () => {
+    try {
+      fs.unlinkSync(containerPath);
+      console.log(`Cleaned up session env file: ${containerPath}`);
+    } catch (err) {
+      // Ignore if already deleted
+      if (err.code !== 'ENOENT') {
+        console.error(`Failed to cleanup session env file: ${err.message}`);
+      }
+    }
+  };
+
+  return { containerPath, hostPath, cleanup };
+}
+
+// =============================================================================
 // Session Management
 // =============================================================================
 
@@ -665,6 +771,8 @@ async function startSession(ws, client) {
 
   console.log(`Starting session for client ${client.id}`);
   const spawnStartTime = Date.now();
+  const sessionId = uuidv4();
+  let envFileCleanup = null;
 
   try {
     // Remove from queue
@@ -675,7 +783,14 @@ async function startSession(ws, client) {
 
     client.state = 'active';
 
+    // Create session env file with sensitive credentials
+    // Using --env-file instead of -e flags prevents secrets from appearing in ps/docker inspect
+    const envFile = createSessionEnvFile(sessionId);
+    envFileCleanup = envFile.cleanup;
+
     // Start ttyd with demo container
+    // Sensitive env vars are passed via --env-file (not visible in ps aux)
+    // Non-sensitive config vars are still passed via -e flags
     const ttydProcess = spawn('ttyd', [
       '--port', String(TTYD_PORT),
       '--interface', '0.0.0.0',
@@ -684,18 +799,28 @@ async function startSession(ws, client) {
       '--writable',
       '--client-option', 'reconnect=0',
       'docker', 'run', '--rm', '-it',
+      // Security constraints for spawned containers
+      '--memory', '2g',                    // Memory limit
+      '--memory-swap', '2g',               // Disable swap
+      '--cpus', '2',                       // CPU limit
+      '--pids-limit', '256',               // Process limit (prevents fork bombs)
+      '--security-opt', 'no-new-privileges:true',  // Prevent privilege escalation
+      '--cap-drop', 'ALL',                 // Drop all capabilities
+      '--cap-add', 'CHOWN',                // Add back minimal required capabilities
+      '--cap-add', 'SETUID',
+      '--cap-add', 'SETGID',
+      '--cap-add', 'DAC_OVERRIDE',
+      '--read-only',                       // Read-only root filesystem
+      '--tmpfs', '/tmp:rw,noexec,nosuid,size=512m',  // Writable /tmp
+      '--tmpfs', '/home/demo:rw,noexec,nosuid,size=256m',  // Writable home
+      // Environment configuration
+      '--env-file', envFile.hostPath,
       '-e', 'TERM=xterm',
-      '-e', `CONFLUENCE_API_TOKEN=${process.env.CONFLUENCE_API_TOKEN}`,
-      '-e', `CONFLUENCE_EMAIL=${process.env.CONFLUENCE_EMAIL}`,
-      '-e', `CONFLUENCE_SITE_URL=${process.env.CONFLUENCE_SITE_URL}`,
       '-e', `SESSION_TIMEOUT_MINUTES=${SESSION_TIMEOUT_MINUTES}`,
       '-e', `ENABLE_AUTOPLAY=${process.env.ENABLE_AUTOPLAY || 'false'}`,
       '-e', `AUTOPLAY_DEBUG=${process.env.AUTOPLAY_DEBUG || 'false'}`,
       '-e', `AUTOPLAY_SHOW_TOOLS=${process.env.AUTOPLAY_SHOW_TOOLS || 'false'}`,
       '-e', `OTEL_ENDPOINT=${process.env.OTEL_ENDPOINT || ''}`,
-      // Claude authentication - pass token as env var (container handles .claude.json setup)
-      ...(CLAUDE_CODE_OAUTH_TOKEN ? ['-e', `CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}`] : []),
-      ...(ANTHROPIC_API_KEY ? ['-e', `ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}`] : []),
       'confluence-demo-container:latest'
     ], {
       stdio: ['pipe', 'pipe', 'pipe']
@@ -709,7 +834,6 @@ async function startSession(ws, client) {
     const startedAt = new Date();
     const expiresAt = new Date(startedAt.getTime() + SESSION_TIMEOUT_MINUTES * 60 * 1000);
     const queueWaitMs = client.joinedAt ? (startedAt - client.joinedAt) : 0;
-    const sessionId = uuidv4();
 
     // Record queue wait time
     if (queueWaitMs > 0) {
@@ -735,7 +859,8 @@ async function startSession(ws, client) {
       ip: client.ip,
       userAgent: client.userAgent,
       queueWaitMs: queueWaitMs,
-      errors: []
+      errors: [],
+      envFileCleanup: envFileCleanup
     };
 
     // Handle ttyd exit
@@ -782,6 +907,11 @@ async function startSession(ws, client) {
     span?.end();
     sendError(ws, 'Failed to start demo session');
     client.state = 'connected';
+
+    // Clean up env file if it was created
+    if (envFileCleanup) {
+      envFileCleanup();
+    }
 
     // Try next in queue
     processQueue();
@@ -840,6 +970,11 @@ async function endSession(reason) {
     } catch (err) {
       console.error('Error killing ttyd:', err.message);
     }
+  }
+
+  // Clean up session env file (contains sensitive credentials)
+  if (activeSession.envFileCleanup) {
+    activeSession.envFileCleanup();
   }
 
   // Clear session token
@@ -1004,6 +1139,14 @@ function sendError(ws, message) {
 // =============================================================================
 // Startup
 // =============================================================================
+
+// Ensure session env directory exists
+try {
+  fs.mkdirSync(SESSION_ENV_CONTAINER_PATH, { recursive: true });
+  console.log(`Session env directory ready: ${SESSION_ENV_CONTAINER_PATH}`);
+} catch (err) {
+  console.error(`Warning: Could not create session env directory: ${err.message}`);
+}
 
 server.listen(PORT, () => {
   console.log(`Queue manager listening on port ${PORT}`);

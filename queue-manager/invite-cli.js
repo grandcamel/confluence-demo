@@ -120,7 +120,14 @@ async function generate(options) {
 }
 
 async function list(options) {
-  const keys = await redis.keys('invite:*');
+  // Use SCAN instead of KEYS to avoid blocking Redis on large datasets
+  const keys = [];
+  let cursor = '0';
+  do {
+    const [nextCursor, batch] = await redis.scan(cursor, 'MATCH', 'invite:*', 'COUNT', 100);
+    cursor = nextCursor;
+    keys.push(...batch);
+  } while (cursor !== '0');
 
   if (keys.length === 0) {
     console.log('\nNo invites found.\n');

@@ -7,6 +7,7 @@ package-lock.json
 
 # Secrets
 secrets/
+session-env/
 
 # Python
 __pycache__/
