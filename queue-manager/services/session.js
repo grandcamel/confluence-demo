@@ -89,9 +89,11 @@ function createSessionEnvFile(sessionId) {
     ...(config.ANTHROPIC_API_KEY && { ANTHROPIC_API_KEY: config.ANTHROPIC_API_KEY }),
   };
 
-  return coreCreateEnvFile(sessionId, envVars, {
+  return coreCreateEnvFile({
+    sessionId,
     containerPath: config.SESSION_ENV_CONTAINER_PATH,
-    hostPath: config.SESSION_ENV_HOST_PATH
+    hostPath: config.SESSION_ENV_HOST_PATH,
+    credentials: envVars
   });
 }
 
