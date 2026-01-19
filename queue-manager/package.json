@@ -6,10 +6,11 @@
   "scripts": {
     "start": "node --require ./instrumentation.js server.js",
     "dev": "node --watch --require ./instrumentation.js server.js",
-    "lint": "eslint *.js",
-    "lint:fix": "eslint *.js --fix"
+    "lint": "eslint *.js config/*.js services/*.js routes/*.js handlers/*.js",
+    "lint:fix": "eslint *.js config/*.js services/*.js routes/*.js handlers/*.js --fix"
   },
   "dependencies": {
+    "@demo-platform/queue-manager-core": "file:../../demo-platform-shared/packages/queue-manager-core",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.55.0",
     "@opentelemetry/exporter-metrics-otlp-proto": "^0.57.0",

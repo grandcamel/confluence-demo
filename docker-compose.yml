@@ -135,9 +135,9 @@ services:
       - ./observability/dashboards:/var/lib/grafana/dashboards:ro
       - lgtm-data:/data
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD-SHELL", "test -f /tmp/ready"]
       <<: *healthcheck-http
-      start_period: 30s
+      start_period: 40s
     restart: unless-stopped
     networks:
       - demo-network
