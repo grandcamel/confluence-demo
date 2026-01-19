@@ -6,6 +6,21 @@
 
 const { spawn } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
+const WebSocket = require('ws');
+
+/**
+ * Safely send a message to a WebSocket, checking readyState first.
+ * @param {WebSocket} ws - WebSocket connection
+ * @param {string} message - Message to send
+ * @returns {boolean} True if message was sent, false otherwise
+ */
+function safeSend(ws, message) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(message);
+    return true;
+  }
+  return false;
+}
 
 const {
   generateSessionToken: coreGenerateToken,
@@ -257,7 +272,7 @@ async function startSession(redis, ws, client, processQueue) {
     activeSession.hardTimeout = hardTimeout;
 
     // Notify client
-    ws.send(JSON.stringify({
+    safeSend(ws, JSON.stringify({
       type: 'session_starting',
       terminal_url: '/terminal',
       expires_at: expiresAt.toISOString(),
@@ -290,7 +305,7 @@ async function startSession(redis, ws, client, processQueue) {
     console.error('Failed to start session:', err);
     span?.recordException(err);
     span?.end();
-    ws.send(JSON.stringify({ type: 'error', message: 'Failed to start demo session' }));
+    safeSend(ws, JSON.stringify({ type: 'error', message: 'Failed to start demo session' }));
     client.state = 'connected';
 
     // Clean up env file if it was created
@@ -309,7 +324,7 @@ function scheduleSessionWarning(ws, client) {
   setTimeout(() => {
     const activeSession = state.getActiveSession();
     if (activeSession && activeSession.clientId === client.id) {
-      ws.send(JSON.stringify({
+      safeSend(ws, JSON.stringify({
         type: 'session_warning',
         minutes_remaining: 5
       }));
@@ -374,7 +389,12 @@ async function endSession(redis, reason, processQueue) {
 
   // Clean up session env file (contains sensitive credentials)
   if (activeSession.envFileCleanup) {
-    activeSession.envFileCleanup();
+    try {
+      activeSession.envFileCleanup();
+    } catch (err) {
+      console.error(`Failed to cleanup session env file for ${activeSession.sessionId}:`, err.message);
+      // Continue with session cleanup even if env file cleanup fails
+    }
   }
 
   // Clear session token
@@ -388,7 +408,7 @@ async function endSession(redis, reason, processQueue) {
   // Notify client to clear cookie
   const clientWs = findClientWs(clientId);
   if (clientWs) {
-    clientWs.send(JSON.stringify({
+    safeSend(clientWs, JSON.stringify({
       type: 'session_ended',
       reason: reason,
       clear_session_cookie: true

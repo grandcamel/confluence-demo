@@ -2,10 +2,25 @@
  * Queue management service.
  */
 
+const WebSocket = require('ws');
 const config = require('../config');
 const state = require('./state');
 const { validateInvite } = require('./invite');
 const { generateSessionToken, startSession, findClientWs } = require('./session');
+
+/**
+ * Safely send a message to a WebSocket, checking readyState first.
+ * @param {WebSocket} ws - WebSocket connection
+ * @param {string} message - Message to send
+ * @returns {boolean} True if message was sent, false otherwise
+ */
+function safeSend(ws, message) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(message);
+    return true;
+  }
+  return false;
+}
 
 /**
  * Join the queue.
@@ -16,18 +31,20 @@ const { generateSessionToken, startSession, findClientWs } = require('./session'
  * @param {Function} processQueueFn - Queue processing callback
  */
 async function joinQueue(redis, ws, client, inviteToken, processQueueFn) {
+  // Check reconnection lock FIRST to prevent race condition (TOCTOU)
+  // This must happen before checking session state
+  if (state.isReconnectionInProgress()) {
+    sendError(ws, 'Reconnection already in progress');
+    return;
+  }
+
   const activeSession = state.getActiveSession();
 
   // Check if this is a reconnection to an active session (grace period)
   if (activeSession && activeSession.awaitingReconnect &&
       activeSession.inviteToken === inviteToken && activeSession.ip === client.ip) {
 
-    // Prevent concurrent reconnection attempts
-    if (state.isReconnectionInProgress()) {
-      sendError(ws, 'Reconnection already in progress');
-      return;
-    }
-
+    // Acquire lock atomically
     state.setReconnectionInProgress(true);
     try {
       console.log(`Client ${client.id} reconnecting to session ${activeSession.sessionId} during grace period`);
@@ -46,11 +63,11 @@ async function joinQueue(redis, ws, client, inviteToken, processQueueFn) {
       client.pendingSessionToken = activeSession.sessionToken;
 
       // Send session info to client
-      ws.send(JSON.stringify({
+      safeSend(ws, JSON.stringify({
         type: 'session_token',
         session_token: activeSession.sessionToken
       }));
-      ws.send(JSON.stringify({
+      safeSend(ws, JSON.stringify({
         type: 'session_starting',
         terminal_url: '/terminal',
         expires_at: activeSession.expiresAt.toISOString(),
@@ -75,7 +92,7 @@ async function joinQueue(redis, ws, client, inviteToken, processQueueFn) {
   if (inviteToken) {
     const validation = await validateInvite(redis, inviteToken, client.ip);
     if (!validation.valid) {
-      ws.send(JSON.stringify({
+      safeSend(ws, JSON.stringify({
         type: 'invite_invalid',
         reason: validation.reason,
         message: validation.message
@@ -89,7 +106,7 @@ async function joinQueue(redis, ws, client, inviteToken, processQueueFn) {
 
   // Check queue size limit
   if (state.queue.length >= config.MAX_QUEUE_SIZE) {
-    ws.send(JSON.stringify({
+    safeSend(ws, JSON.stringify({
       type: 'queue_full',
       message: 'Queue is full. Please try again later.'
     }));
@@ -107,7 +124,7 @@ async function joinQueue(redis, ws, client, inviteToken, processQueueFn) {
   client.pendingSessionToken = pendingToken;
 
   // Send token immediately so client can set cookie
-  ws.send(JSON.stringify({
+  safeSend(ws, JSON.stringify({
     type: 'session_token',
     session_token: pendingToken
   }));
@@ -141,7 +158,7 @@ function leaveQueue(ws, client) {
     client.state = 'connected';
     console.log(`Client ${client.id} left queue`);
 
-    ws.send(JSON.stringify({ type: 'left_queue' }));
+    safeSend(ws, JSON.stringify({ type: 'left_queue' }));
     broadcastQueueUpdate();
   }
 }
@@ -155,7 +172,7 @@ function sendQueuePosition(ws, client) {
   const position = state.queue.indexOf(client.id) + 1;
   const estimatedWait = position * config.AVERAGE_SESSION_MINUTES;
 
-  ws.send(JSON.stringify({
+  safeSend(ws, JSON.stringify({
     type: 'queue_position',
     position: position,
     estimated_wait: `${estimatedWait} minutes`,
@@ -201,7 +218,7 @@ function processQueue(redis) {
  * @param {string} message - Error message
  */
 function sendError(ws, message) {
-  ws.send(JSON.stringify({ type: 'error', message }));
+  safeSend(ws, JSON.stringify({ type: 'error', message }));
 }
 
 module.exports = {

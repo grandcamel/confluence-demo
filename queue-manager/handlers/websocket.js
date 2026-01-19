@@ -5,11 +5,27 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
+const WebSocket = require('ws');
 const { createConnectionRateLimiter } = require('@demo-platform/queue-manager-core');
 const config = require('../config');
 const state = require('../services/state');
 const { joinQueue, leaveQueue, broadcastQueueUpdate, processQueue } = require('../services/queue');
 const { endSession } = require('../services/session');
+
+/**
+ * Safely send a message to a WebSocket, checking readyState first.
+ * Prevents crashes when socket is closing or already closed.
+ * @param {WebSocket} ws - WebSocket connection
+ * @param {string} message - Message to send
+ * @returns {boolean} True if message was sent, false otherwise
+ */
+function safeSend(ws, message) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(message);
+    return true;
+  }
+  return false;
+}
 
 // Rate limiter instance using shared library
 const connectionRateLimiter = createConnectionRateLimiter({
@@ -79,7 +95,9 @@ function setup(wss, redis) {
         await handleMessage(redis, ws, message);
       } catch (err) {
         console.error('Error handling message:', err.message);
-        sendError(ws, 'Invalid message format');
+        // Distinguish between JSON parsing errors and other errors
+        const isJsonError = err instanceof SyntaxError || err.message.includes('JSON');
+        sendError(ws, isJsonError ? 'Invalid message format' : 'Failed to process message');
       }
     });
 
@@ -112,7 +130,7 @@ async function handleMessage(redis, ws, message) {
       break;
 
     case 'heartbeat':
-      ws.send(JSON.stringify({ type: 'heartbeat_ack' }));
+      safeSend(ws, JSON.stringify({ type: 'heartbeat_ack' }));
       break;
 
     default:
@@ -168,7 +186,7 @@ function handleDisconnect(redis, ws) {
 }
 
 function sendStatus(ws) {
-  ws.send(JSON.stringify({
+  safeSend(ws, JSON.stringify({
     type: 'status',
     queue_size: state.queue.length,
     session_active: state.getActiveSession() !== null
@@ -176,7 +194,7 @@ function sendStatus(ws) {
 }
 
 function sendError(ws, message) {
-  ws.send(JSON.stringify({ type: 'error', message }));
+  safeSend(ws, JSON.stringify({ type: 'error', message }));
 }
 
-module.exports = { setup, cleanupRateLimits };
+module.exports = { setup, cleanupRateLimits, safeSend };
