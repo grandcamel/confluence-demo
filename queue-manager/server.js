@@ -70,13 +70,11 @@ initMetrics(
 app.use(express.json());
 app.use(cookieParser());
 
-// Content-Type validation for POST/PUT/PATCH requests
+// Require JSON Content-Type for all POST/PUT/PATCH requests
 app.use((req, res, next) => {
-  const methodsRequiringBody = ['POST', 'PUT', 'PATCH'];
-  if (methodsRequiringBody.includes(req.method)) {
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
     const contentType = req.headers['content-type'];
-    const hasBody = req.headers['content-length'] && req.headers['content-length'] !== '0';
-    if (hasBody && (!contentType || !contentType.includes('application/json'))) {
+    if (!contentType || !contentType.includes('application/json')) {
       return res.status(415).json({ error: 'Content-Type must be application/json' });
     }
   }

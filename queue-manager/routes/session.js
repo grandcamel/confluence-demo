@@ -52,12 +52,32 @@ function register(app, redis) {
       return res.status(400).json({ error: 'Token required' });
     }
 
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress;
+
     // Verify token is valid (either active or pending)
     const isActiveToken = state.sessionTokens.has(token);
     const isPendingToken = state.pendingSessionTokens.has(token);
 
     if (!isActiveToken && !isPendingToken) {
       return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    // For pending tokens, verify IP matches the original requestor
+    if (isPendingToken) {
+      const pendingData = state.pendingSessionTokens.get(token);
+      if (pendingData && pendingData.ip !== clientIp) {
+        console.log(`Session cookie IP mismatch: expected ${pendingData.ip}, got ${clientIp}`);
+        return res.status(403).json({ error: 'Token IP mismatch' });
+      }
+    }
+
+    // For active session tokens, verify IP matches the session owner
+    if (isActiveToken) {
+      const activeSession = state.getActiveSession();
+      if (activeSession && activeSession.ip !== clientIp) {
+        console.log(`Session cookie IP mismatch: expected ${activeSession.ip}, got ${clientIp}`);
+        return res.status(403).json({ error: 'Token IP mismatch' });
+      }
     }
 
     // Set secure cookie

@@ -259,12 +259,15 @@ async function startSession(redis, ws, client, processQueue) {
     const hardTimeoutMs = (config.SESSION_TIMEOUT_MINUTES + 5) * 60 * 1000;
     const hardTimeout = setTimeout(() => {
       const currentSession = state.getActiveSession();
-      if (currentSession && currentSession.ttydProcess && currentSession.clientId === client.id) {
+      if (currentSession && currentSession.ttydProcess && !currentSession.ttydProcess.killed && currentSession.clientId === client.id) {
         console.log(`Hard timeout reached for session ${sessionId}, force-killing ttyd`);
         try {
           currentSession.ttydProcess.kill('SIGKILL');
         } catch (err) {
-          console.error('Error force-killing ttyd:', err.message);
+          // Process may have already exited (ESRCH = no such process)
+          if (err.code !== 'ESRCH') {
+            console.error('Error force-killing ttyd:', err.message);
+          }
         }
       }
     }, hardTimeoutMs);
