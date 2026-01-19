@@ -1,0 +1,6 @@
+{
+  "name": "confluence-demo",
+  "version": "1.0.0",
+  "description": "Claude Code plugin for confluence-demo development",
+  "agents": "agents/*.md"
+}
