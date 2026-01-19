@@ -397,7 +397,8 @@ async function endSession(redis, reason, processQueue) {
     try {
       activeSession.envFileCleanup();
     } catch (err) {
-      console.error(`Failed to cleanup session env file for ${activeSession.sessionId}:`, err.message);
+      // CRITICAL: Credential file cleanup failed - may leave sensitive data on disk
+      console.error(`CRITICAL: Failed to cleanup session env file for ${activeSession.sessionId}:`, err.message);
       // Continue with session cleanup even if env file cleanup fails
     }
   }

@@ -74,7 +74,11 @@ function register(app, redis) {
     // For active session tokens, verify IP matches the session owner
     if (isActiveToken) {
       const activeSession = state.getActiveSession();
-      if (activeSession && activeSession.ip !== clientIp) {
+      if (!activeSession) {
+        console.log(`Active token ${token.slice(0, 8)}... has no corresponding session`);
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+      if (activeSession.ip !== clientIp) {
         console.log(`Session cookie IP mismatch: expected ${activeSession.ip}, got ${clientIp}`);
         return res.status(403).json({ error: 'Token IP mismatch' });
       }
