@@ -530,7 +530,7 @@ demo-platform-shared/
 |---------|------------|---------|
 | as-demo | Local: `../as-demo` | Unified platform (Confluence + JIRA + Splunk) |
 | Confluence-Assistant-Skills | [GitHub](https://github.com/jasonkrueger/Confluence-Assistant-Skills) / [PyPI](https://pypi.org/project/confluence-assistant-skills-plugin/) | Source plugin |
-| confluence-assistant-skills-lib | [PyPI](https://pypi.org/project/confluence-assistant-skills-lib/) | Shared library |
+| confluence-as | [PyPI](https://pypi.org/project/confluence-as/) | Shared library |
 | jira-demo | [GitHub](https://github.com/jasonkrueger/jira-demo) | Reference implementation |
 | splunk-demo | [GitHub](https://github.com/grandcamel/splunk-demo) | Similar demo for Splunk |
 | demo-platform-shared | Local: `../demo-platform-shared` | Shared queue-manager-core library |
@@ -656,7 +656,7 @@ pip search confluence-assistant-skills  # Note: search may be disabled
 curl -s https://pypi.org/pypi/confluence-assistant-skills/json | jq .info.version
 
 # Manual install for debugging
-pip install confluence-assistant-skills -v
+pip install confluence-as -v
 ```
 
 **Autoplay scenario errors ("No prompts found"):**

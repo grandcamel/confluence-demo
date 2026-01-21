@@ -109,8 +109,8 @@ trap cleanup EXIT
 
 # Install Confluence Assistant Skills CLI from PyPI
 echo -e "${CYAN}Installing Confluence Assistant Skills...${NC}"
-if pip install --quiet --no-cache-dir confluence-assistant-skills 2>/dev/null; then
-    CLI_VERSION=$(pip show confluence-assistant-skills 2>/dev/null | grep Version | cut -d' ' -f2)
+if pip install --quiet --no-cache-dir confluence-as 2>/dev/null; then
+    CLI_VERSION=$(pip show confluence-as 2>/dev/null | grep Version | cut -d' ' -f2)
     echo -e "  ${GREEN}✓${NC} confluence CLI v${CLI_VERSION} installed"
 else
     echo -e "  ${YELLOW}⚠${NC} CLI installation failed"

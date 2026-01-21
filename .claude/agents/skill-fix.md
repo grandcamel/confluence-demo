@@ -23,8 +23,8 @@ Analyze skill test failures and make minimal, targeted changes to fix them. Focu
 ## Key Directories
 
 - **Skills**: `${CONFLUENCE_SKILLS_PATH}/plugins/confluence-assistant-skills/skills/`
-- **Library**: `${CONFLUENCE_SKILLS_PATH}/confluence-assistant-skills-lib/src/confluence_assistant_skills_lib/`
-- **CLI Commands**: `${CONFLUENCE_SKILLS_PATH}/confluence-assistant-skills-lib/src/confluence_assistant_skills_lib/cli/commands/`
+- **Library**: `${CONFLUENCE_SKILLS_PATH}/confluence-as/src/confluence_as/`
+- **CLI Commands**: `${CONFLUENCE_SKILLS_PATH}/confluence-as/src/confluence_as/cli/commands/`
 
 ## Common Fixes
 

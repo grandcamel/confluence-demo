@@ -17,7 +17,7 @@ RUN curl -fsSL -o /usr/local/bin/ttyd \
 
 # Install Python dependencies for cleanup script
 RUN pip3 install --break-system-packages --no-cache-dir \
-    confluence-assistant-skills-lib>=0.1.0 \
+    confluence-as>=0.1.0 \
     requests
 
 WORKDIR /app

@@ -349,8 +349,8 @@ If the demo container shows "⚠ CLI installation failed":
 # Verify the PyPI package exists
 curl -s https://pypi.org/pypi/confluence-assistant-skills/json | jq .info.version
 
-# The CLI is published as "confluence-assistant-skills" (not the lib package)
-pip install confluence-assistant-skills
+# The CLI is published as "confluence-as" (not the lib package)
+pip install confluence-as
 confluence --version
 ```
 

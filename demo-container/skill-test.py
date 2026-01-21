@@ -1162,7 +1162,7 @@ def generate_fix_context(result: PromptResult, skills_path: str) -> dict[str, An
 
     # Check if library code might be relevant (API errors, etc.)
     if "error" in result.response_text.lower() or result.quality == "low":
-        lib_path = Path(skills_path) / "confluence-assistant-skills-lib" / "src" / "confluence_assistant_skills_lib"
+        lib_path = Path(skills_path) / "confluence-as" / "src" / "confluence_as"
         if lib_path.exists():
             # Add search.py if relevant to search failures
             search_path = lib_path / "search.py"

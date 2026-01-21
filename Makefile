@@ -34,8 +34,8 @@ BASE_IMAGE ?= grandcamel/claude-devcontainer:enhanced
 # -----------------------------------------------------------------------------
 CONFLUENCE_SKILLS_PATH ?= $(HOME)/IdeaProjects/Confluence-Assistant-Skills
 CONFLUENCE_PLUGIN_PATH = $(CONFLUENCE_SKILLS_PATH)/.claude-plugin
-CONFLUENCE_LIB_PATH = $(CONFLUENCE_SKILLS_PATH)/confluence-assistant-skills-lib
-CONFLUENCE_DIST_PATH = $(CONFLUENCE_SKILLS_PATH)/confluence-assistant-skills-lib/dist
+CONFLUENCE_LIB_PATH = $(CONFLUENCE_SKILLS_PATH)/confluence-as
+CONFLUENCE_DIST_PATH = $(CONFLUENCE_SKILLS_PATH)/confluence-as/dist
 
 # -----------------------------------------------------------------------------
 # Test Configuration
